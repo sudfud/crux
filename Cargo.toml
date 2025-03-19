@@ -1,0 +1,11 @@
+[package]
+name = "crux"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+strum = "0.27.1"
+strum_macros = "0.27.1"
+
+[features]
+trace_execution = []
