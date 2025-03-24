@@ -1,6 +1,7 @@
 mod chunk;
 mod compiler;
 mod debug;
+mod object;
 mod scanner;
 mod value;
 mod vm;
@@ -19,9 +20,11 @@ fn repl(vm: &mut VM) {
 	io::stdout().flush();
 
 	match io::stdin().read_line(&mut input) {
-	    Ok(_) => if let Err(e) = vm.interpret(&input) {
+	    Ok(_) => if input.trim() == "exit" {
+		return;
+	    } else if let Err(e) = vm.interpret(&input) {
 		match e {
-		    InterpretError::Compile => eprintln!("Compile Error"),
+		    InterpretError::Compile(e) => eprintln!("Compile Error: {}", e),
 		    InterpretError::Runtime => eprintln!("Runtime Error")
 		}
 	    },
@@ -34,7 +37,7 @@ fn run_file(vm: &mut VM, path: &str) {
     match std::fs::read_to_string(path) {
 	Ok(source) => if let Err(e) = vm.interpret(&source) {
 	    match e {
-		InterpretError::Compile => eprintln!("Compile Error"),
+		InterpretError::Compile(e) => eprintln!("Compile Error: {}", e),
 		InterpretError::Runtime => eprintln!("Runtime Error")
 	    }  
 	},

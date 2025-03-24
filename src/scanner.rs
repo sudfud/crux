@@ -2,7 +2,7 @@ use std::string::ToString;
 
 use strum_macros::Display;
 
-#[derive(Display, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Display, PartialEq, Eq, Clone, Copy, Hash)]
 pub(crate) enum TokenType {
     // Single char tokens
     LeftParen,
@@ -55,7 +55,7 @@ pub(crate) enum TokenType {
     EOF
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Token<'a> {
     token_type: TokenType,
     lexeme: &'a str,
@@ -104,7 +104,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Scan through the source string and create the next Token
-    pub(crate) fn scan_token(&mut self) -> Token {
+    pub(crate) fn scan_token(&mut self) -> Token<'a> {
 	self.skip_whitespace();
 	
 	self.start = self.current;
@@ -229,7 +229,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Create an identifier token based on the scanner's start and current positions
-    fn identifier(&mut self) -> Token {
+    fn identifier(&mut self) -> Token<'a> {
 	while self.peek().is_ascii_alphabetic() || self.peek().is_ascii_digit() {
 	    self.advance();
 	}
@@ -238,7 +238,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Create a number token based on the scanner's start and current positions
-    fn number(&mut self) -> Token {
+    fn number(&mut self) -> Token<'a> {
 	while self.peek().is_ascii_digit() {
 	    self.advance();
 	}
@@ -256,7 +256,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Create a string token based on the scanner's start and current positions
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> Token<'a> {
 	while self.peek() != '"' && !self.is_at_end() {
 	    if self.peek() == '\n' {
 		self.line += 1;
@@ -318,7 +318,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Create a token based on the scanner's start and current positions
-    fn make_token(&self, token_type: TokenType) -> Token {
+    fn make_token(&self, token_type: TokenType) -> Token<'a> {
 	Token {
 	    token_type,
 	    lexeme: &self.source[self.start..self.current],
@@ -327,7 +327,7 @@ impl <'a> Scanner<'a> {
     }
 
     /// Create an error token with the given message
-    fn error_token(&self, message: &'static str) -> Token {
+    fn error_token(&self, message: &'static str) -> Token<'a> {
 	Token {
 	    token_type: TokenType::Error,
 	    lexeme: message,

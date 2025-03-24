@@ -7,10 +7,20 @@ use crate::value::Value;
 pub(crate) enum Opcode {
     Constant,
     ConstantLong,
+    Null,
+    True,
+    False,
+    Equal,
+    NotEqual,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
     Add,
     Subtract,
     Multiply,
     Divide,
+    Not,
     Negate,
     Return
 }
@@ -80,6 +90,7 @@ impl Chunk {
 	self.constants.len() - 1
     }
 
+    /*
     /// Write a constant instruction and index to the bytecode
     pub(crate) fn write_constant(&mut self, value: Value, line: usize) {
 	let constant_index = self.add_constant(value);
@@ -97,7 +108,8 @@ impl Chunk {
 	    panic!("Too many constants in one chunk");
 	}
     }
-
+     */
+    
     pub(crate) fn reset(&mut self) {
 	self.code.clear();
 	self.lines.clear();
