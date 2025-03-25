@@ -25,13 +25,13 @@ pub(crate) enum Opcode {
     Return
 }
 
-pub(crate) struct Chunk {
+pub(crate) struct Chunk<'a> {
     code: Vec<u8>,
     lines: Vec<(usize, usize)>,
-    constants: Vec<Value>
+    constants: Vec<Value<'a>>
 }
 
-impl Chunk {
+impl <'a> Chunk<'a> {
     pub(crate) fn new() -> Self {
 	Self {
 	    code: Vec::new(),
@@ -80,12 +80,12 @@ impl Chunk {
     }
 
     /// Read a constant Value from the constant table
-    pub(crate) fn read_constant(&self, index: usize) -> Value {
+    pub(crate) fn read_constant(&self, index: usize) -> Value<'a> {
 	self.constants[index]
     }
 
     /// Add a constant Value to the constants table
-    pub(crate) fn add_constant(&mut self, value: Value) -> usize {
+    pub(crate) fn add_constant(&mut self, value: Value<'a>) -> usize {
 	self.constants.push(value);
 	self.constants.len() - 1
     }

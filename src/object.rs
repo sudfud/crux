@@ -1,13 +1,13 @@
 use std::alloc::{alloc, dealloc, handle_alloc_error, Layout};
 use std::collections::HashSet;
 
-pub(crate) struct Object {
-    next: *mut Object,
-    object_type: ObjectType
+pub(crate) struct Object<'a> {
+    next: *mut Object<'a>,
+    object_type: ObjectType<'a>
 }
 
-impl Object {
-    fn string(text: *const String) -> Self {
+impl <'a> Object<'a> {
+    fn string(text: &'a str) -> Self {
 	Self {
 	    next: std::ptr::null_mut(),
 	    object_type: ObjectType::String(text)
@@ -19,7 +19,7 @@ impl Object {
     }
 }
 
-impl PartialEq for Object {
+impl <'a> PartialEq for Object<'a> {
     fn eq(&self, other: &Self) -> bool {
 	match (&self.object_type, &other.object_type) {
 	    (ObjectType::String(s1), ObjectType::String(s2)) => s1 == s2
@@ -28,21 +28,21 @@ impl PartialEq for Object {
 }
 
 #[derive(Clone)]
-pub(crate) enum ObjectType {
-    String(*const String)
+pub(crate) enum ObjectType<'a> {
+    String(&'a str)
 }
 
-pub(crate) struct Heap {
-    objects: *mut Object,
+pub(crate) struct Heap<'a> {
+    objects: *mut Object<'a>,
     strings: HashSet<String>
 }
 
-impl Heap {
+impl <'a> Heap<'a> {
     pub(crate) fn new() -> Self {
 	Self { objects: std::ptr::null_mut(), strings: HashSet::new() }
     }
     
-    pub(crate) fn allocate_string(&mut self, text: &str) -> *mut Object {
+    pub(crate) fn allocate_string(&mut self, text: &str) -> *mut Object<'a> {
 	unsafe {
 	    let layout = Layout::new::<Object>();
 	    let ptr = alloc(layout);

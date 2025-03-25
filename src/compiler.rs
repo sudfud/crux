@@ -45,16 +45,16 @@ enum Precedence {
     Primary
 }
 
-type ParseFn<'a> = fn(&mut Compiler<'a>) -> ();
+type ParseFn<'a, 'b> = fn(&mut Compiler<'a, 'b>) -> ();
 
-struct ParseRule<'a> {
-    prefix: Option<ParseFn<'a>>,
-    infix: Option<ParseFn<'a>>,
+struct ParseRule<'a, 'b> {
+    prefix: Option<ParseFn<'a, 'b>>,
+    infix: Option<ParseFn<'a, 'b>>,
     precedence: Precedence
 }
 
-impl <'a> ParseRule<'a> {
-    fn new(prefix: Option<ParseFn<'a>>, infix: Option<ParseFn<'a>>, precedence: Precedence) -> Self {
+impl <'a, 'b> ParseRule<'a, 'b> {
+    fn new(prefix: Option<ParseFn<'a, 'b>>, infix: Option<ParseFn<'a, 'b>>, precedence: Precedence) -> Self {
 	Self {
 	    prefix,
 	    infix,
@@ -98,16 +98,16 @@ impl fmt::Display for CompileError {
 
 impl std::error::Error for CompileError {}
 
-struct Compiler<'a> {
-    chunk: &'a mut Chunk,
-    heap: &'a mut Heap,
-    scanner: Scanner<'a>,
-    parser: Parser<'a>,
-    parse_rules: HashMap<TokenType, ParseRule<'a>>
+struct Compiler<'a: 'b, 'b> {
+    chunk: &'b mut Chunk<'a>,
+    heap: &'b mut Heap<'a>,
+    scanner: Scanner<'b>,
+    parser: Parser<'b>,
+    parse_rules: HashMap<TokenType, ParseRule<'a, 'b>>
 }
 
-impl <'a> Compiler<'a> {
-    fn new(source: &'a str, chunk: &'a mut Chunk, heap: &'a mut Heap) -> Self {
+impl <'a, 'b> Compiler<'a, 'b> {
+    fn new(source: &'b str, chunk: &'b mut Chunk<'a>, heap: &'b mut Heap<'a>) -> Self {
 	Self {
 	    chunk,
 	    heap,
@@ -158,7 +158,7 @@ impl <'a> Compiler<'a> {
 	}
     }
 
-    fn current_chunk(&mut self) -> &mut Chunk {
+    fn current_chunk(&mut self) -> &mut Chunk<'a> {
 	self.chunk
     }
 
@@ -207,7 +207,7 @@ impl <'a> Compiler<'a> {
     }
 
     /// Write a constant to the chunk's constant table
-    fn emit_constant(&mut self, value: Value) {
+    fn emit_constant(&mut self, value: Value<'a>) {
 	let constant_index = self.current_chunk().add_constant(value);
 
 	if constant_index <= 0xFF {
@@ -341,7 +341,7 @@ impl <'a> Compiler<'a> {
     }
 
     /// Report an error found at the given token
-    fn error_at(&mut self, token: Token<'a>, message: &str) {
+    fn error_at(&mut self, token: Token<'b>, message: &str) {
 	if self.parser.panic_mode {
 	    return;
 	}
@@ -368,7 +368,7 @@ impl <'a> Compiler<'a> {
     }
 }
 
-pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap) -> Result<(), CompileError> {
+pub(crate) fn compile<'a>(source: &str, chunk: &mut Chunk<'a>, heap: &mut Heap<'a>) -> Result<(), CompileError> {
     let mut compiler = Compiler::new(source, chunk, heap);
 
     compiler.advance();

@@ -11,14 +11,14 @@ pub(crate) enum InterpretError {
     Runtime
 }
 
-pub(crate) struct VM {
-    chunk: Chunk,
-    heap: Heap,
+pub(crate) struct VM<'a> {
+    chunk: Chunk<'a>,
+    heap: Heap<'a>,
     ip: usize,
-    stack: Vec<Value>
+    stack: Vec<Value<'a>>
 }
 
-impl VM {
+impl <'a> VM<'a> {
     pub(crate) fn new() -> Self {
 	Self {
 	    chunk: Chunk::new(),
@@ -61,21 +61,21 @@ impl VM {
 	self.stack.clear();
     }
 
-    fn push_value(&mut self, value: Value) {
+    fn push_value(&mut self, value: Value<'a>) {
 	self.stack.push(value)
     }
 
-    fn pop_value(&mut self) -> Result<Value, InterpretError> {
+    fn pop_value(&mut self) -> Result<Value<'a>, InterpretError> {
 	self.stack
 	    .pop()
 	    .ok_or(InterpretError::Runtime)
     }
 
-    fn peek_value(&self, distance: usize) -> &Value {
+    fn peek_value(&self, distance: usize) -> &Value<'a> {
 	&self.stack[self.stack.len() - 1 - distance]
     }
 
-    fn binary_op(&mut self, op: fn(Value, Value) -> Result<Value, &'static str>) -> Result<(), InterpretError> {
+    fn binary_op(&mut self, op: fn(Value<'a>, Value<'a>) -> Result<Value<'a>, &'static str>) -> Result<(), InterpretError> {
 	match op(*self.peek_value(1), *self.peek_value(0)) {
 	    Ok(value) => {
 		self.pop_value()?;
