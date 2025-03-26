@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::chunk::{Chunk, Opcode};
 use crate::compiler::{self, CompileError};
 use crate::object::Heap;
@@ -11,17 +13,19 @@ pub(crate) enum InterpretError {
     Runtime
 }
 
-pub(crate) struct VM<'a> {
-    chunk: Chunk<'a>,
-    heap: Heap<'a>,
+pub(crate) struct VM {
+    chunk: Chunk,
+    globals: HashMap<String, Value>,
+    heap: Heap,
     ip: usize,
-    stack: Vec<Value<'a>>
+    stack: Vec<Value>
 }
 
-impl <'a> VM<'a> {
+impl VM {
     pub(crate) fn new() -> Self {
 	Self {
 	    chunk: Chunk::new(),
+	    globals: HashMap::new(),
 	    heap: Heap::new(),
 	    ip: 0,
 	    stack: Vec::new()
@@ -61,22 +65,22 @@ impl <'a> VM<'a> {
 	self.stack.clear();
     }
 
-    fn push_value(&mut self, value: Value<'a>) {
+    fn push_value(&mut self, value: Value) {
 	self.stack.push(value)
     }
 
-    fn pop_value(&mut self) -> Result<Value<'a>, InterpretError> {
+    fn pop_value(&mut self) -> Result<Value, InterpretError> {
 	self.stack
 	    .pop()
 	    .ok_or(InterpretError::Runtime)
     }
 
-    fn peek_value(&self, distance: usize) -> &Value<'a> {
+    fn peek_value(&self, distance: usize) -> &Value {
 	&self.stack[self.stack.len() - 1 - distance]
     }
 
-    fn binary_op(&mut self, op: fn(Value<'a>, Value<'a>) -> Result<Value<'a>, &'static str>) -> Result<(), InterpretError> {
-	match op(*self.peek_value(1), *self.peek_value(0)) {
+    fn binary_op(&mut self, op: fn(Value, Value) -> Result<Value, &'static str>) -> Result<(), InterpretError> {
+	match op(self.peek_value(1).clone(), self.peek_value(0).clone()) {
 	    Ok(value) => {
 		self.pop_value()?;
 		self.pop_value()?;
@@ -133,6 +137,18 @@ impl <'a> VM<'a> {
 	    };
 	}
 
+	macro_rules! read_string {
+	    () => {
+		read_constant!().as_string().unwrap()
+	    };
+	}
+
+	macro_rules! read_string_long {
+	    () => {
+		read_constant_long!().as_string().unwrap()
+	    };
+	}
+
 	// Loop until Return or Error
 	loop {
 	    // Print debug info
@@ -149,17 +165,47 @@ impl <'a> VM<'a> {
 	    match Opcode::from_repr(read_byte!()) {
 		Some(instruction) => match instruction {
 		    Opcode::Constant => {
-			let constant: Value = read_constant!();
-			self.push_value(constant);
+			let constant: &Value = read_constant!();
+			self.push_value(constant.clone());
 		    },
 		    Opcode::ConstantLong => {
-			let constant: Value = read_constant_long!();
-			self.push_value(constant);
+			let constant: &Value = read_constant_long!();
+			self.push_value(constant.clone());
 			
 		    },
 		    Opcode::Null => self.push_value(Value::Null),
 		    Opcode::True => self.push_value(Value::Boolean(true)),
 		    Opcode::False => self.push_value(Value::Boolean(false)),
+		    Opcode::Pop => { self.pop_value()?; }
+		    Opcode::GetGlobal | Opcode::GetGlobalLong => {
+			let name = if instruction == Opcode::GetGlobal {read_string!()} else {read_string_long!()};
+
+			if self.globals.get(name).is_some() {
+			    let value = self.globals
+				.get(name)
+				.unwrap()
+				.clone();
+
+			    self.push_value(value);
+			}
+		    },
+		    Opcode::DefineGlobal | Opcode::DefineGlobalLong => {
+			let name = if instruction == Opcode::DefineGlobal {read_string!()} else {read_string_long!()};
+
+			self.globals.insert(String::from(name), self.peek_value(0).clone());
+			self.pop_value()?;
+		    },
+		    Opcode::SetGlobal | Opcode::SetGlobalLong => {
+			let name = if instruction == Opcode::SetGlobal {read_string!()} else {read_string_long!()};
+
+			if self.globals.contains_key(name) {
+			    *self.globals.get_mut(name).unwrap() = self.peek_value(0).clone();
+			}
+			else {
+			    self.runtime_error(format!("Undefined variable '{}'.", name));
+			    return Err(InterpretError::Runtime);
+			}
+		    },
 		    Opcode::Equal => {
 			let b = self.pop_value()?;
 			let a = self.pop_value()?;
@@ -176,13 +222,16 @@ impl <'a> VM<'a> {
 		    Opcode::GreaterEqual => self.comparison(f64::ge)?,
 		    Opcode::Less => self.comparison(f64::lt)?,
 		    Opcode::LessEqual => self.comparison(f64::le)?,
-		    Opcode::Add => if let (Some(mut a), Some(b)) = (self.peek_value(1).as_string(), self.peek_value(0).as_string()) {
+		    Opcode::Add => if let (Some(a), Some(b)) = (self.peek_value(1).as_string(), self.peek_value(0).as_string()) {
+			
+			let mut concat = String::from(a);
+			concat.push_str(&b);
+
+			let value = Value::Object(self.heap.allocate_string(concat));
+
 			self.pop_value()?;
 			self.pop_value()?;
 			
-			a.push_str(&b);
-
-			let value = Value::Object(self.heap.allocate_string(&a));
 			self.push_value(value);
 		    } else if let (Some(a), Some(b)) = (self.peek_value(1).as_number(), self.peek_value(0).as_number()) {
 			self.pop_value()?;
@@ -214,10 +263,10 @@ impl <'a> VM<'a> {
 			    return Err(InterpretError::Runtime);
 			}
 		    },
-		    Opcode::Return => {
+		    Opcode::Print => {
 			println!("{}", self.pop_value()?);
-			break;
-		    }
+		    },
+		    Opcode::Return => return Ok(())
 		},
 		None => return Err(InterpretError::Runtime)
 	    }

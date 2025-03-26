@@ -10,6 +10,13 @@ pub(crate) enum Opcode {
     Null,
     True,
     False,
+    Pop,
+    GetGlobal,
+    GetGlobalLong,
+    DefineGlobal,
+    DefineGlobalLong,
+    SetGlobal,
+    SetGlobalLong,
     Equal,
     NotEqual,
     Greater,
@@ -22,16 +29,17 @@ pub(crate) enum Opcode {
     Divide,
     Not,
     Negate,
+    Print,
     Return
 }
 
-pub(crate) struct Chunk<'a> {
+pub(crate) struct Chunk {
     code: Vec<u8>,
     lines: Vec<(usize, usize)>,
-    constants: Vec<Value<'a>>
+    constants: Vec<Value>
 }
 
-impl <'a> Chunk<'a> {
+impl Chunk {
     pub(crate) fn new() -> Self {
 	Self {
 	    code: Vec::new(),
@@ -80,12 +88,12 @@ impl <'a> Chunk<'a> {
     }
 
     /// Read a constant Value from the constant table
-    pub(crate) fn read_constant(&self, index: usize) -> Value<'a> {
-	self.constants[index]
+    pub(crate) fn read_constant(&self, index: usize) -> &Value {
+	&self.constants[index]
     }
 
     /// Add a constant Value to the constants table
-    pub(crate) fn add_constant(&mut self, value: Value<'a>) -> usize {
+    pub(crate) fn add_constant(&mut self, value: Value) -> usize {
 	self.constants.push(value);
 	self.constants.len() - 1
     }

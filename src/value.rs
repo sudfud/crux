@@ -3,15 +3,15 @@ use std::ops;
 
 use crate::object::{Object, ObjectType};
 
-#[derive(Clone, Copy)]
-pub(crate) enum Value<'a> {
+#[derive(Clone)]
+pub(crate) enum Value {
     Boolean(bool),
     Number(f64),
     Null,
-    Object(*mut Object<'a>)
+    Object(*mut Object)
 }
 
-impl <'a> Value <'a> {
+impl Value {
     pub(crate) fn is_falsey(&self) -> bool {
 	match self {
 	    Self::Boolean(b) => !b,
@@ -27,11 +27,11 @@ impl <'a> Value <'a> {
 	}
     }
 
-    pub(crate) fn as_string(&self) -> Option<String> {
+    pub(crate) fn as_string(&self) -> Option<&str> {
 	match self {
 	    Self::Object(o) => unsafe {
 		match (**o).object_type() {
-		    ObjectType::String(s) => Some(String::from(*s)),
+		    ObjectType::String(s) => Some(s),
 		    _ => None
 		}
 	    },
@@ -40,7 +40,7 @@ impl <'a> Value <'a> {
     }
 }
 
-impl <'a> fmt::Display for Value<'a> {
+impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
 	write!(
 	    f,
@@ -51,7 +51,7 @@ impl <'a> fmt::Display for Value<'a> {
 		Self::Null => String::from("null"),
 		Self::Object(o) => unsafe {
 		    match (**o).object_type() {
-			ObjectType::String(s) => String::from(*s)
+			ObjectType::String(s) => s.clone()
 		    }
 		}
 	    }
@@ -59,7 +59,7 @@ impl <'a> fmt::Display for Value<'a> {
     }
 }
 
-impl <'a> PartialEq for Value<'a> {
+impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
 	match (self, other) {
 	    (Self::Number(n1), Self::Number(n2)) => n1 == n2,
@@ -73,7 +73,7 @@ impl <'a> PartialEq for Value<'a> {
     }
 }
 
-impl <'a> ops::Add for Value<'a> {
+impl ops::Add for Value {
     type Output = Result<Self, &'static str>;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -84,7 +84,7 @@ impl <'a> ops::Add for Value<'a> {
     }
 }
 
-impl <'a> ops::Sub for Value<'a> {
+impl ops::Sub for Value {
     type Output = Result<Self, &'static str>;
 
     fn sub(self, rhs: Self) -> Self::Output {
@@ -95,7 +95,7 @@ impl <'a> ops::Sub for Value<'a> {
     }
 }
 
-impl <'a> ops::Mul for Value<'a> {
+impl ops::Mul for Value {
     type Output = Result<Self, &'static str>;
 
     fn mul(self, rhs: Self) -> Self::Output {
@@ -106,7 +106,7 @@ impl <'a> ops::Mul for Value<'a> {
     }
 }
 
-impl <'a> ops::Div for Value<'a> {
+impl ops::Div for Value {
     type Output = Result<Self, &'static str>;
 
     fn div(self, rhs: Self) -> Self::Output {

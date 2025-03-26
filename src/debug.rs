@@ -33,6 +33,13 @@ pub(crate) fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
 	    Opcode::Null => simple_instruction("OP_NULL", offset),
 	    Opcode::True => simple_instruction("OP_TRUE", offset),
 	    Opcode::False => simple_instruction("OP_FALSE", offset),
+	    Opcode::Pop => simple_instruction("OP_POP", offset),
+	    Opcode::GetGlobal => constant_instruction("OP_GET_GLOBAL", chunk, offset, false),
+	    Opcode::GetGlobalLong => constant_instruction("OP_GET_GLOBAL_LONG", chunk, offset, true),
+	    Opcode::DefineGlobal => constant_instruction("OP_DEFINE_GLOBAL", chunk, offset, false),
+	    Opcode::DefineGlobalLong => constant_instruction("OP_DEFINE_GLOBAL_LONG", chunk, offset, true),
+	    Opcode::SetGlobal => constant_instruction("OP_SET_GLOBAL", chunk, offset, false),
+	    Opcode::SetGlobalLong => constant_instruction("OP_SET_GLOBAL_LONG", chunk, offset, true),
 	    Opcode::Equal => simple_instruction("OP_EQUAL", offset),
 	    Opcode::NotEqual => simple_instruction("OP_NOT_EQUAL", offset),
 	    Opcode::Greater => simple_instruction("OP_GREATER", offset),
@@ -45,6 +52,7 @@ pub(crate) fn disassemble_instruction(chunk: &Chunk, offset: usize) -> usize {
 	    Opcode::Divide => simple_instruction("OP_DIVIDE", offset),
 	    Opcode::Not => simple_instruction("OP_NOT", offset),
 	    Opcode::Negate => simple_instruction("OP_NEGATE", offset),
+	    Opcode::Print => simple_instruction("OP_PRINT", offset),
 	    Opcode::Return => simple_instruction("OP_RETURN", offset)
 	},
 	None => {
