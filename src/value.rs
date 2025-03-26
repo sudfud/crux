@@ -8,7 +8,8 @@ pub(crate) enum Value {
     Boolean(bool),
     Number(f64),
     Null,
-    Object(*mut Object)
+    Object(*mut Object),
+    Undefined
 }
 
 impl Value {
@@ -16,8 +17,13 @@ impl Value {
 	match self {
 	    Self::Boolean(b) => !b,
 	    Self::Number(_) | Self::Object(_) => false,
-	    Self::Null => true
+	    Self::Null => true,
+	    Self::Undefined => true
 	}
+    }
+
+    pub(crate) fn is_undefined(&self) -> bool {
+	self == &Self::Undefined
     }
 
     pub(crate) fn as_number(&self) -> Option<f64> {
@@ -53,7 +59,8 @@ impl fmt::Display for Value {
 		    match (**o).object_type() {
 			ObjectType::String(s) => s.clone()
 		    }
-		}
+		},
+		Self::Undefined => String::from("undefined")
 	    }
 	)
     }
@@ -64,7 +71,7 @@ impl PartialEq for Value {
 	match (self, other) {
 	    (Self::Number(n1), Self::Number(n2)) => n1 == n2,
 	    (Self::Boolean(b1), Self::Boolean(b2)) => b1 == b2,
-	    (Self::Null, Self::Null) => true,
+	    (Self::Null, Self::Null) | (Self::Undefined, Self::Undefined) => true,
 	    (Self::Object(o1), Self::Object(o2)) => unsafe {
 		**o1 == **o2
 	    },

@@ -8,6 +8,42 @@ use crate::value::Value;
 #[cfg(feature = "trace_execution")]
 use crate::debug;
 
+pub(crate) struct Globals {
+    names: HashMap<String, usize>,
+    values: Vec<Value>
+}
+
+impl Globals {
+    fn new() -> Self {
+	Self {
+	    names: HashMap::new(),
+	    values: Vec::new()
+	}
+    }
+
+    pub(crate) fn contains(&self, name: &str) -> bool {
+	self.names.contains_key(name)
+    }
+
+    pub(crate) fn index(&self, name: &str) -> Option<usize> {
+	self.names
+	    .get(name)
+	    .map(|idx| *idx)
+    }
+
+    pub(crate) fn value(&self, index: usize) -> &Value {
+	&self.values[index]
+    }
+
+    pub(crate) fn insert(&mut self, name: String, value: Value) -> usize {
+	self.values.push(value);
+
+	let index = self.values.len() - 1;
+	self.names.insert(name, index);
+	index
+    }
+}
+
 pub(crate) enum InterpretError {
     Compile(CompileError),
     Runtime
@@ -15,7 +51,7 @@ pub(crate) enum InterpretError {
 
 pub(crate) struct VM {
     chunk: Chunk,
-    globals: HashMap<String, Value>,
+    globals: Globals,
     heap: Heap,
     ip: usize,
     stack: Vec<Value>
@@ -25,7 +61,7 @@ impl VM {
     pub(crate) fn new() -> Self {
 	Self {
 	    chunk: Chunk::new(),
-	    globals: HashMap::new(),
+	    globals: Globals::new(),
 	    heap: Heap::new(),
 	    ip: 0,
 	    stack: Vec::new()
@@ -33,7 +69,7 @@ impl VM {
     }
 
     pub(crate) fn interpret(&mut self, source: &str) -> Result<(), InterpretError> {
-	let result = compiler::compile(source, &mut self.chunk, &mut self.heap);
+	let result = compiler::compile(source, &mut self.chunk, &mut self.heap, &mut self.globals);
 	
 	if let Err(e) = result {
 	    self.chunk.reset();
@@ -124,6 +160,17 @@ impl VM {
 	    };
 	}
 
+	macro_rules! read_word {
+	    () => {
+		{
+		    let mut word = read_byte!() as usize;
+		    word |= (read_byte!() as usize) << 8;
+
+		    word
+		}
+	    };
+	}
+
 	macro_rules! read_constant {
 	    () => {
 		self.chunk.read_constant(read_byte!() as usize)
@@ -158,7 +205,7 @@ impl VM {
 		    print!("[ {} ]", *value);
 		}
 		println!();
-		debug::disassemble_instruction(&self.chunk, self.ip);
+		debug::disassemble_instruction(&self.chunk, &self.globals, self.ip);
 	    }
 
 	    // Read and execute next instruction
@@ -178,33 +225,45 @@ impl VM {
 		    Opcode::False => self.push_value(Value::Boolean(false)),
 		    Opcode::Pop => { self.pop_value()?; }
 		    Opcode::GetGlobal | Opcode::GetGlobalLong => {
-			let name = if instruction == Opcode::GetGlobal {read_string!()} else {read_string_long!()};
+			let global_index = if instruction == Opcode::GetGlobal {
+			    read_byte!() as usize
+			} else {
+			    read_word!()
+			};
 
-			if self.globals.get(name).is_some() {
-			    let value = self.globals
-				.get(name)
-				.unwrap()
-				.clone();
+			let value = self.globals.value(global_index);
 
-			    self.push_value(value);
-			}
-		    },
-		    Opcode::DefineGlobal | Opcode::DefineGlobalLong => {
-			let name = if instruction == Opcode::DefineGlobal {read_string!()} else {read_string_long!()};
-
-			self.globals.insert(String::from(name), self.peek_value(0).clone());
-			self.pop_value()?;
-		    },
-		    Opcode::SetGlobal | Opcode::SetGlobalLong => {
-			let name = if instruction == Opcode::SetGlobal {read_string!()} else {read_string_long!()};
-
-			if self.globals.contains_key(name) {
-			    *self.globals.get_mut(name).unwrap() = self.peek_value(0).clone();
-			}
-			else {
-			    self.runtime_error(format!("Undefined variable '{}'.", name));
+			if value.is_undefined() {
+			    self.runtime_error("Undefined variable.".into());
 			    return Err(InterpretError::Runtime);
 			}
+
+			self.push_value(value.clone());
+		    },
+		    Opcode::DefineGlobal | Opcode::DefineGlobalLong => {
+			let global_index = if instruction == Opcode::DefineGlobal {
+			    read_byte!() as usize
+			} else {
+			    read_word!()
+			};
+
+			self.globals.values[global_index] = self.pop_value()?;
+		    },
+		    Opcode::SetGlobal | Opcode::SetGlobalLong => {
+			let global_index = if instruction == Opcode::SetGlobal {
+			    read_byte!() as usize
+			} else {
+			    read_word!()
+			};
+
+			let value = self.globals.value(global_index);
+
+			if value.is_undefined() {
+			    self.runtime_error("Undefined variable.".into());
+			    return Err(InterpretError::Runtime);
+			}
+
+			self.globals.values[global_index] = self.peek_value(0).clone();
 		    },
 		    Opcode::Equal => {
 			let b = self.pop_value()?;
@@ -222,7 +281,10 @@ impl VM {
 		    Opcode::GreaterEqual => self.comparison(f64::ge)?,
 		    Opcode::Less => self.comparison(f64::lt)?,
 		    Opcode::LessEqual => self.comparison(f64::le)?,
-		    Opcode::Add => if let (Some(a), Some(b)) = (self.peek_value(1).as_string(), self.peek_value(0).as_string()) {
+		    Opcode::Add => {
+			let (a, b) = (self.peek_value(1), self.peek_value(0));
+			
+			if let (Some(a), Some(b)) = (a.as_string(), b.as_string()) {
 			
 			let mut concat = String::from(a);
 			concat.push_str(&b);
@@ -233,13 +295,14 @@ impl VM {
 			self.pop_value()?;
 			
 			self.push_value(value);
-		    } else if let (Some(a), Some(b)) = (self.peek_value(1).as_number(), self.peek_value(0).as_number()) {
+		    } else if let (Some(a), Some(b)) = (a.as_number(), b.as_number()) {
 			self.pop_value()?;
 			self.pop_value()?;
 
 			self.push_value(Value::Number(a + b));
 		    } else {
 			self.runtime_error("Operands must be numbers or strings".into());
+			}
 		    },
 		    Opcode::Subtract => self.binary_op(Value::sub)?,
 		    Opcode::Multiply => self.binary_op(Value::mul)?,

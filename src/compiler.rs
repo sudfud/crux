@@ -7,6 +7,7 @@ use crate::chunk::{Chunk, Opcode};
 use crate::object::{Heap, Object};
 use crate::scanner::{Scanner, Token, TokenType};
 use crate::value::Value;
+use crate::vm::Globals;
 
 #[cfg(feature = "print_code")]
 use crate::debug;
@@ -101,16 +102,20 @@ impl std::error::Error for CompileError {}
 struct Compiler<'a> {
     chunk: &'a mut Chunk,
     heap: &'a mut Heap,
+    globals: &'a mut Globals,
+    global_names: HashMap<String, usize>,
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     parse_rules: HashMap<TokenType, ParseRule<'a>>
 }
 
 impl <'a> Compiler<'a> {
-    fn new(source: &'a str, chunk: &'a mut Chunk, heap: &'a mut Heap) -> Self {
+    fn new(source: &'a str, chunk: &'a mut Chunk, heap: &'a mut Heap, globals: &'a mut Globals) -> Self {
 	Self {
 	    chunk,
 	    heap,
+	    globals,
+	    global_names: HashMap::new(),
 	    scanner: Scanner::new(source),
 	    parser: Parser::new(),
 	    parse_rules: HashMap::from([
@@ -252,7 +257,7 @@ impl <'a> Compiler<'a> {
 
 	#[cfg(feature = "print_code")]
 	if self.parser.error.is_none() {
-	    debug::disassemble_chunk(self.current_chunk(), "code");
+	    debug::disassemble_chunk(self.current_chunk(), self.globals, "code");
 	}
     }
 
@@ -385,8 +390,10 @@ impl <'a> Compiler<'a> {
 
     /// Write a variable identifier constant to the current chunk
     fn identifier_constant(&mut self, name: String) -> usize {
-	let identifier = Value::Object(self.heap.allocate_string(name));
-	self.make_constant(identifier)
+	match self.globals.index(&name) {
+	    Some(idx) => idx,
+	    None => self.globals.insert(name, Value::Undefined)
+	}
     }
 
     fn parse_variable(&mut self, error_message: &'static str) -> usize {
@@ -531,8 +538,8 @@ impl <'a> Compiler<'a> {
     }
 }
 
-pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap) -> Result<(), CompileError> {
-    let mut compiler = Compiler::new(source, chunk, heap);
+pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap, globals: &mut Globals) -> Result<(), CompileError> {
+    let mut compiler = Compiler::new(source, chunk, heap, globals);
 
     compiler.advance();
 
