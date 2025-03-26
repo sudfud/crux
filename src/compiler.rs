@@ -103,7 +103,6 @@ struct Compiler<'a> {
     chunk: &'a mut Chunk,
     heap: &'a mut Heap,
     globals: &'a mut Globals,
-    global_names: HashMap<String, usize>,
     scanner: Scanner<'a>,
     parser: Parser<'a>,
     parse_rules: HashMap<TokenType, ParseRule<'a>>
@@ -115,7 +114,6 @@ impl <'a> Compiler<'a> {
 	    chunk,
 	    heap,
 	    globals,
-	    global_names: HashMap::new(),
 	    scanner: Scanner::new(source),
 	    parser: Parser::new(),
 	    parse_rules: HashMap::from([
