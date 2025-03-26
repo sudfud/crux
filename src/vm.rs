@@ -224,6 +224,28 @@ impl VM {
 		    Opcode::True => self.push_value(Value::Boolean(true)),
 		    Opcode::False => self.push_value(Value::Boolean(false)),
 		    Opcode::Pop => { self.pop_value()?; }
+		    Opcode::GetLocal | Opcode::GetLocalLong => {
+			let slot = if instruction == Opcode::GetLocal {
+			    read_byte!() as usize
+			} else {
+			    read_word!()
+			};
+
+			let local = self.stack[slot].clone();
+
+			self.push_value(local);
+		    },
+		    Opcode::SetLocal | Opcode::SetLocalLong => {
+			let slot = if instruction == Opcode::SetLocal {
+			    read_byte!() as usize
+			} else {
+			    read_word!()
+			};
+
+			let local = self.stack[slot].clone();
+
+			self.push_value(local);
+		    },
 		    Opcode::GetGlobal | Opcode::GetGlobalLong => {
 			let global_index = if instruction == Opcode::GetGlobal {
 			    read_byte!() as usize

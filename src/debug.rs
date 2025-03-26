@@ -35,6 +35,10 @@ pub(crate) fn disassemble_instruction(chunk: &Chunk, globals: &Globals, offset: 
 	    Opcode::True => simple_instruction("OP_TRUE", offset),
 	    Opcode::False => simple_instruction("OP_FALSE", offset),
 	    Opcode::Pop => simple_instruction("OP_POP", offset),
+	    Opcode::GetLocal => byte_instruction("OP_GET_LOCAL", chunk, offset, false),
+	    Opcode::GetLocalLong => byte_instruction("OP_GET_LOCAL_LONG", chunk, offset, true),
+	    Opcode::SetLocal => byte_instruction("OP_SET_LOCAL", chunk, offset, false),
+	    Opcode::SetLocalLong => byte_instruction("OP_SET_LOCAL_LONG", chunk, offset, true),
 	    Opcode::GetGlobal => global_instruction("OP_GET_GLOBAL", chunk, globals, offset, false),
 	    Opcode::GetGlobalLong => global_instruction("OP_GET_GLOBAL_LONG", chunk, globals, offset, true),
 	    Opcode::DefineGlobal => global_instruction("OP_DEFINE_GLOBAL", chunk, globals, offset, false),
@@ -80,6 +84,23 @@ fn constant_instruction(name: &str, chunk: &Chunk, offset: usize, long: bool) ->
     print!("{:-16} {:4} '", name, constant_index);
     print!("{}", chunk.read_constant(constant_index));
     println!("'");
+
+    if !long {
+	offset + 2
+    }
+    else {
+	offset + 3
+    }
+}
+
+fn byte_instruction(name: &str, chunk: &Chunk, offset: usize, long: bool) -> usize {
+    let slot = if !long {
+	chunk.read_byte(offset + 1) as usize
+    } else {
+	(chunk.read_byte(offset + 1) as usize) | ((chunk.read_byte(offset + 2) as usize) << 8)
+    };
+
+    println!("{:-16} {:4}", name, slot);
 
     if !long {
 	offset + 2

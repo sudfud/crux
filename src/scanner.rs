@@ -62,6 +62,12 @@ pub(crate) struct Token<'a> {
     line: usize
 }
 
+impl <'a> PartialEq for Token<'a> {
+    fn eq(&self, other: &Self) -> bool {
+	self.token_type == other.token_type && self.lexeme == other.lexeme
+    }
+}
+
 impl <'a> Token<'a> {
     pub(crate) fn dummy() -> Self {
 	Self {
@@ -168,7 +174,7 @@ impl <'a> Scanner<'a> {
 		    self.advance();
 		},
 		'/' => if self.peek_next() == '/' {
-		    while self.peek() != '\n' && self.is_at_end() {
+		    while self.peek() != '\n' && !self.is_at_end() {
 			self.advance();
 		    }
 		} else {

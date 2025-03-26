@@ -1,0 +1,12 @@
+var a = "hello";
+print a;
+
+{
+	var a = "hi";
+	var b = ":)";
+	print a + " " + b;
+}
+
+var b = ":D";
+
+print a + " " + b;
