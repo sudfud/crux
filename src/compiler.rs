@@ -150,7 +150,7 @@ impl <'a> Compiler<'a> {
 		(TokenType::Identifier, ParseRule::new(Some(Compiler::variable), None, Precedence::None)),
 		(TokenType::String, ParseRule::new(Some(Compiler::string), None, Precedence::None)),
 		(TokenType::Number, ParseRule::new(Some(Compiler::number), None, Precedence::None)),
-		(TokenType::And, ParseRule::new(None, None, Precedence::None)),
+		(TokenType::And, ParseRule::new(None, Some(Compiler::and), Precedence::And)),
 		(TokenType::Class, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Else, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::False, ParseRule::new(Some(Compiler::literal), None, Precedence::None)),
@@ -158,7 +158,7 @@ impl <'a> Compiler<'a> {
 		(TokenType::Function, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::If, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Null, ParseRule::new(Some(Compiler::literal), None, Precedence::None)),
-		(TokenType::Or, ParseRule::new(None, None, Precedence::None)),
+		(TokenType::Or, ParseRule::new(None, Some(Compiler::or), Precedence::Or)),
 		(TokenType::Print, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Return, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Super, ParseRule::new(None, None, Precedence::None)),
@@ -356,6 +356,18 @@ impl <'a> Compiler<'a> {
 	}
     }
 
+    /// Compile a logical or expression
+    fn or(&mut self, can_assign: bool) {
+	let else_jump = self.emit_jump(Opcode::JumpIfFalse as u8);
+	let end_jump = self.emit_jump(Opcode::Jump as u8);
+
+	self.patch_jump(else_jump);
+	self.emit_byte(Opcode::Pop as u8);
+
+	self.parse_precedence(Precedence::Or);
+	self.patch_jump(end_jump);
+    }
+
     /// Compile a string literal
     fn string(&mut self, can_assign: bool) {
 	let text = self.parser.previous.lexeme();
@@ -527,6 +539,7 @@ impl <'a> Compiler<'a> {
 	self.locals[count - 1].depth = self.scope_depth;
     }
 
+    /// Write instructions to define a global or local variable
     fn define_variable(&mut self, global_index: usize) {
 	if self.scope_depth > 0 {
 	    self.mark_initialized();
@@ -540,6 +553,16 @@ impl <'a> Compiler<'a> {
 	    self.emit_byte(Opcode::DefineGlobalLong as u8);
 	    self.emit_bytes((global_index & 0x00FF) as u8, (global_index >> 8) as u8);
 	}
+    }
+
+    /// Compile a logical and operation
+    fn and(&mut self, can_assign: bool) {
+	let end_jump = self.emit_jump(Opcode::JumpIfFalse as u8);
+
+	self.emit_byte(Opcode::Pop as u8);
+	self.parse_precedence(Precedence::And);
+
+	self.patch_jump(end_jump);
     }
 
     /// Compile an expression
