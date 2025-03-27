@@ -34,9 +34,9 @@ pub(crate) enum Opcode {
     Not,
     Negate,
     Print,
-    Jump,
-    
+    Jump,    
     JumpIfFalse,
+    Loop,
     Return
 }
 

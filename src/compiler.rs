@@ -234,6 +234,19 @@ impl <'a> Compiler<'a> {
 	self.emit_byte(byte2);
     }
 
+    /// Write instructions for a loop to the current chunk
+    fn emit_loop(&mut self, loop_start: usize) {
+	self.emit_byte(Opcode::Loop as u8);
+
+	let offset = self.current_chunk().count() - loop_start + 2;
+
+	if offset > 0xFFFF {
+	    self.error("Loop body too large.");
+	}
+
+	self.emit_bytes((offset & 0xFF) as u8, ((offset & 0xFF00) >> 8) as u8);
+    }
+
     /// Write a jump address to the current chunk
     fn emit_jump(&mut self, instruction: u8) -> usize {
 	self.emit_byte(instruction);
@@ -630,6 +643,24 @@ impl <'a> Compiler<'a> {
 	self.emit_byte(Opcode::Print as u8);
     }
 
+    /// Compile a while statement
+    fn while_statement(&mut self) {
+	let loop_start = self.current_chunk().count();
+	
+	self.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+	self.expression();
+	self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+	let exit_jump = self.emit_jump(Opcode::JumpIfFalse as u8);
+
+	self.emit_byte(Opcode::Pop as u8);
+	self.statement();
+	self.emit_loop(loop_start);
+
+	self.patch_jump(exit_jump);
+	self.emit_byte(Opcode::Pop as u8);
+    }
+
     /// Advance to the possible beginning/end of a statement
     fn synchronize(&mut self) {
 	self.parser.panic_mode = false;
@@ -677,6 +708,9 @@ impl <'a> Compiler<'a> {
 	}
 	else if self.match_token(TokenType::If) {
 	    self.if_statement();
+	}
+	else if self.match_token(TokenType::While) {
+	    self.while_statement();
 	}
 	else if self.match_token(TokenType::LeftBrace) {
 	    self.begin_scope();

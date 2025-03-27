@@ -62,6 +62,7 @@ pub(crate) fn disassemble_instruction(chunk: &Chunk, globals: &Globals, offset: 
 	    Opcode::Print => simple_instruction("OP_PRINT", offset),
 	    Opcode::Jump => jump_instruction("OP_JUMP", 1, chunk, offset),
 	    Opcode::JumpIfFalse => jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
+	    Opcode::Loop => jump_instruction("OP_LOOP", -1, chunk, offset),
 	    Opcode::Return => simple_instruction("OP_RETURN", offset)
 	},
 	None => {

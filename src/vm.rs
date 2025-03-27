@@ -367,6 +367,11 @@ impl VM {
 			    self.ip += offset as usize;
 			}
 		    },
+		    Opcode::Loop => {
+			let offset = read_word!();
+
+			self.ip -= offset as usize;
+		    },
 		    Opcode::Return => return Ok(())
 		},
 		None => {
