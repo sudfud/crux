@@ -1,0 +1,16 @@
+var x = 5;
+var y = 10;
+
+if (x == 5) {
+	print "x == 5";
+}
+else {
+	print "x != 5";
+}
+
+if (y > 20) {
+	print "y > 20";
+}
+else {
+	print "y <= 20";
+}

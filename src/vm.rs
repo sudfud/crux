@@ -132,9 +132,11 @@ impl VM {
     }
 
     fn comparison(&mut self, op: fn(&f64, &f64) -> bool) -> Result<(), InterpretError> {
-	match (self.peek_value(1), self.peek_value(0)) {
-	    (Value::Number(n1), Value::Number(n2)) => {
-		self.push_value(Value::Boolean(op(n1, n2)));
+	match (self.peek_value(1).as_number(), self.peek_value(0).as_number()) {
+	    (Some(n1), Some(n2)) => {
+		self.pop_value()?;
+		self.pop_value()?;
+		self.push_value(Value::Boolean(op(&n1, &n2)));
 		Ok(())
 	    },
 	    _ => {
@@ -163,8 +165,8 @@ impl VM {
 	macro_rules! read_word {
 	    () => {
 		{
-		    let mut word = read_byte!() as usize;
-		    word |= (read_byte!() as usize) << 8;
+		    let mut word = read_byte!() as u16;
+		    word |= (read_byte!() as u16) << 8;
 
 		    word
 		}
@@ -209,7 +211,9 @@ impl VM {
 	    }
 
 	    // Read and execute next instruction
-	    match Opcode::from_repr(read_byte!()) {
+	    let byte = read_byte!();
+	    
+	    match Opcode::from_repr(byte) {
 		Some(instruction) => match instruction {
 		    Opcode::Constant => {
 			let constant: &Value = read_constant!();
@@ -228,7 +232,7 @@ impl VM {
 			let slot = if instruction == Opcode::GetLocal {
 			    read_byte!() as usize
 			} else {
-			    read_word!()
+			    read_word!() as usize
 			};
 
 			let local = self.stack[slot].clone();
@@ -239,7 +243,7 @@ impl VM {
 			let slot = if instruction == Opcode::SetLocal {
 			    read_byte!() as usize
 			} else {
-			    read_word!()
+			    read_word!() as usize
 			};
 
 			let local = self.stack[slot].clone();
@@ -250,7 +254,7 @@ impl VM {
 			let global_index = if instruction == Opcode::GetGlobal {
 			    read_byte!() as usize
 			} else {
-			    read_word!()
+			    read_word!() as usize
 			};
 
 			let value = self.globals.value(global_index);
@@ -266,7 +270,7 @@ impl VM {
 			let global_index = if instruction == Opcode::DefineGlobal {
 			    read_byte!() as usize
 			} else {
-			    read_word!()
+			    read_word!() as usize
 			};
 
 			self.globals.values[global_index] = self.pop_value()?;
@@ -275,7 +279,7 @@ impl VM {
 			let global_index = if instruction == Opcode::SetGlobal {
 			    read_byte!() as usize
 			} else {
-			    read_word!()
+			    read_word!() as usize
 			};
 
 			let value = self.globals.value(global_index);
@@ -351,9 +355,24 @@ impl VM {
 		    Opcode::Print => {
 			println!("{}", self.pop_value()?);
 		    },
+		    Opcode::Jump => {
+			let offset = read_word!();
+
+			self.ip += offset as usize;
+		    }
+		    Opcode::JumpIfFalse => {
+			let offset = read_word!();
+
+			if self.peek_value(0).is_falsey() {
+			    self.ip += offset as usize;
+			}
+		    },
 		    Opcode::Return => return Ok(())
 		},
-		None => return Err(InterpretError::Runtime)
+		None => {
+		    self.runtime_error(format!("Unrecognized opcode: {}", byte));
+		    return Err(InterpretError::Runtime)
+		}
 	    }
 	}
 	

@@ -34,6 +34,9 @@ pub(crate) enum Opcode {
     Not,
     Negate,
     Print,
+    Jump,
+    
+    JumpIfFalse,
     Return
 }
 
@@ -63,7 +66,7 @@ impl Chunk {
     }
 
     /// Add a byte to the end of the bytecode
-    pub(crate) fn write_byte(&mut self, byte: u8, line: usize) {
+    pub(crate) fn push_byte(&mut self, byte: u8, line: usize) {
 	self.code.push(byte);
 	
 	match self.lines.last_mut() {
@@ -74,6 +77,10 @@ impl Chunk {
 	    },
 	    None => self.lines.push((line, 1))
 	}
+    }
+
+    pub(crate) fn write_byte(&mut self, index: usize, byte: u8) {
+	self.code[index] = byte;
     }
 
     /// Read the line number associated with the given bytecode index

@@ -192,7 +192,12 @@ pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap, globals:
     }
 }
 
-fn current_chunk<'a, 'b>(compiler: &'b mut Compiler<'a>) -> &'b mut Chunk
+fn current_chunk<'a, 'b>(compiler: &'b Compiler<'a>) -> &'b Chunk
+where 'a: 'b {
+    compiler.chunk
+}
+
+fn current_chunk_mut<'a, 'b>(compiler: &'b mut Compiler<'a>) -> &'b mut Chunk
 where 'a: 'b {
     compiler.chunk
 }
@@ -244,7 +249,7 @@ fn match_token(compiler: &mut Compiler, token_type: TokenType) -> bool {
 fn emit_byte<'a, 'b>(compiler: &'b mut Compiler<'a>, byte: u8)
 where 'a: 'b {
     let line = compiler.parser.previous.line();
-    current_chunk(compiler).write_byte(byte, line);
+    current_chunk_mut(compiler).push_byte(byte, line);
 }
 
 /// Write two bytes to the current chunk
@@ -254,6 +259,14 @@ where 'a: 'b {
     emit_byte(compiler, byte2);
 }
 
+/// Write a jump address to the current chunk
+fn emit_jump(compiler: &mut Compiler, instruction: u8) -> usize {
+    emit_byte(compiler, instruction);
+    emit_bytes(compiler, 0xFF, 0xFF);
+
+    current_chunk(compiler).count() - 2
+}
+
 /// Write return opcode to the current chunk
 fn emit_return(compiler: &mut Compiler) {
     emit_byte(compiler, Opcode::Return as u8);
@@ -261,7 +274,7 @@ fn emit_return(compiler: &mut Compiler) {
 
 fn make_constant<'a, 'b>(compiler: &'b mut Compiler<'a>, value: Value) -> usize
 where 'a: 'b {
-    let constant_index = current_chunk(compiler).add_constant(value);
+    let constant_index = current_chunk_mut(compiler).add_constant(value);
 
     if constant_index <= 0xFFFF {
 	constant_index
@@ -285,13 +298,25 @@ fn emit_constant(compiler: &mut Compiler, value: Value) {
     }
 }
 
+fn patch_jump(compiler: &mut Compiler, offset: usize) {
+    let jump = current_chunk(compiler).count() - offset - 2;
+
+    if jump > 0xFFFF {
+	error(compiler, "Too much code to jump over.");
+    }
+
+    current_chunk_mut(compiler).write_byte(offset, (jump & 0xFF) as u8);
+    current_chunk_mut(compiler).write_byte(offset + 1, ((jump & 0xFF00) >> 8) as u8);
+}
+
 /// End compilation
 fn end(compiler: &mut Compiler) {
     emit_return(compiler);
 
     #[cfg(feature = "print_code")]
     if compiler.parser.error.is_none() {
-	debug::disassemble_chunk(compiler.current_chunk(), compiler.globals, "code");
+	let chunk = &*current_chunk(compiler);
+	debug::disassemble_chunk(chunk, compiler.globals, "code");
     }
 }
 
@@ -584,6 +609,28 @@ fn expression_statement(compiler: &mut Compiler) {
     emit_byte(compiler, Opcode::Pop as u8);
 }
 
+/// Compile an if statement
+fn if_statement(compiler: &mut Compiler) {
+    consume(compiler, TokenType::LeftParen, "Expect '(' after 'if'.");
+    expression(compiler);
+    consume(compiler, TokenType::RightParen, "Expect ')' after condition.");
+
+    let then_jump = emit_jump(compiler, Opcode::JumpIfFalse as u8);
+    emit_byte(compiler, Opcode::Pop as u8);
+    statement(compiler);
+
+    let else_jump = emit_jump(compiler, Opcode::Jump as u8);
+    
+    patch_jump(compiler, then_jump);
+    emit_byte(compiler, Opcode::Pop as u8);
+
+    if match_token(compiler, TokenType::Else) {
+	statement(compiler);
+    }
+
+    patch_jump(compiler, else_jump);
+}
+
 /// Compile a print statement
 fn print_statement(compiler: &mut Compiler) {
     expression(compiler);
@@ -635,6 +682,9 @@ fn declaration(compiler: &mut Compiler) {
 fn statement(compiler: &mut Compiler) {
     if match_token(compiler, TokenType::Print) {
 	print_statement(compiler);
+    }
+    else if match_token(compiler, TokenType::If) {
+	if_statement(compiler);
     }
     else if match_token(compiler, TokenType::LeftBrace) {
 	begin_scope(compiler);
