@@ -128,42 +128,42 @@ impl <'a> Compiler<'a> {
 	    scanner: Scanner::new(source),
 	    parser: Parser::new(),
 	    parse_rules: HashMap::from([
-		(TokenType::LeftParen, ParseRule::new(Some(grouping), None, Precedence::None)),
+		(TokenType::LeftParen, ParseRule::new(Some(Compiler::grouping), None, Precedence::None)),
 		(TokenType::RightParen, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::LeftBrace, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::RightBrace, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Comma, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Dot, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::Minus, ParseRule::new(Some(unary), Some(binary), Precedence::Term)),
-		(TokenType::Plus, ParseRule::new(None, Some(binary), Precedence::Term)),
+		(TokenType::Minus, ParseRule::new(Some(Compiler::unary), Some(Compiler::binary), Precedence::Term)),
+		(TokenType::Plus, ParseRule::new(None, Some(Compiler::binary), Precedence::Term)),
 		(TokenType::Semicolon, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::Slash, ParseRule::new(None, Some(binary), Precedence::Factor)),
-		(TokenType::Star, ParseRule::new(None, Some(binary), Precedence::Factor)),
-		(TokenType::Bang, ParseRule::new(Some(unary), None, Precedence::None)),
-		(TokenType::BangEqual, ParseRule::new(None, Some(binary), Precedence::Equality)),
+		(TokenType::Slash, ParseRule::new(None, Some(Compiler::binary), Precedence::Factor)),
+		(TokenType::Star, ParseRule::new(None, Some(Compiler::binary), Precedence::Factor)),
+		(TokenType::Bang, ParseRule::new(Some(Compiler::unary), None, Precedence::None)),
+		(TokenType::BangEqual, ParseRule::new(None, Some(Compiler::binary), Precedence::Equality)),
 		(TokenType::Equal, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::EqualEqual, ParseRule::new(None, Some(binary), Precedence::Equality)),
-		(TokenType::Greater, ParseRule::new(None, Some(binary), Precedence::Comparison)),
-		(TokenType::GreaterEqual, ParseRule::new(None, Some(binary), Precedence::Comparison)),
-		(TokenType::Less, ParseRule::new(None, Some(binary), Precedence::Comparison)),
-		(TokenType::LessEqual, ParseRule::new(None, Some(binary), Precedence::Comparison)),
-		(TokenType::Identifier, ParseRule::new(Some(variable), None, Precedence::None)),
-		(TokenType::String, ParseRule::new(Some(string), None, Precedence::None)),
-		(TokenType::Number, ParseRule::new(Some(number), None, Precedence::None)),
+		(TokenType::EqualEqual, ParseRule::new(None, Some(Compiler::binary), Precedence::Equality)),
+		(TokenType::Greater, ParseRule::new(None, Some(Compiler::binary), Precedence::Comparison)),
+		(TokenType::GreaterEqual, ParseRule::new(None, Some(Compiler::binary), Precedence::Comparison)),
+		(TokenType::Less, ParseRule::new(None, Some(Compiler::binary), Precedence::Comparison)),
+		(TokenType::LessEqual, ParseRule::new(None, Some(Compiler::binary), Precedence::Comparison)),
+		(TokenType::Identifier, ParseRule::new(Some(Compiler::variable), None, Precedence::None)),
+		(TokenType::String, ParseRule::new(Some(Compiler::string), None, Precedence::None)),
+		(TokenType::Number, ParseRule::new(Some(Compiler::number), None, Precedence::None)),
 		(TokenType::And, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Class, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Else, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::False, ParseRule::new(Some(literal), None, Precedence::None)),
+		(TokenType::False, ParseRule::new(Some(Compiler::literal), None, Precedence::None)),
 		(TokenType::For, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Function, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::If, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::Null, ParseRule::new(Some(literal), None, Precedence::None)),
+		(TokenType::Null, ParseRule::new(Some(Compiler::literal), None, Precedence::None)),
 		(TokenType::Or, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Print, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Return, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Super, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::This, ParseRule::new(None, None, Precedence::None)),
-		(TokenType::True, ParseRule::new(Some(literal), None, Precedence::None)),
+		(TokenType::True, ParseRule::new(Some(Compiler::literal), None, Precedence::None)),
 		(TokenType::Var, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::While, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Error, ParseRule::new(None, None, Precedence::None)),
@@ -171,18 +171,548 @@ impl <'a> Compiler<'a> {
 	    ])
 	}
     }
+
+    fn current_chunk(&self) -> &Chunk {
+	self.chunk
+    }
+
+    fn current_chunk_mut(&mut self) -> &mut Chunk {
+	self.chunk
+    }
+
+    /// Scan for the next token
+    fn advance(&mut self) {
+	self.parser.previous = self.parser.current;
+
+	loop {
+	    let token = self.scanner.scan_token();
+	    
+	    self.parser.current = token;
+
+	    if self.parser.current.token_type() != TokenType::Error {
+		break;
+	    }
+
+	    self.error_at_current(self.parser.current.lexeme());
+	}
+    }
+
+    /// Check if the parser's current token matches the given type
+    fn consume(&mut self, token_type: TokenType, message: &'static str) {
+	if self.parser.current.token_type() == token_type {
+	    self.advance();
+	    return;
+	}
+
+	self.error_at_current(message);
+    }
+
+    /// Check if the current token matches the given type
+    fn check_token(&self, token_type: TokenType) -> bool {
+	self.parser.current.token_type() == token_type
+    }
+
+    /// Advance to the next token if the current one matches the given type
+    fn match_token(&mut self, token_type: TokenType) -> bool {
+	if !self.check_token(token_type) {
+	    return false;
+	}
+
+	self.advance();
+	true
+    }
+
+    /// Write a single byte to the current chunk
+    fn emit_byte(&mut self, byte: u8) {
+	let line = self.parser.previous.line();
+	self.current_chunk_mut().push_byte(byte, line);
+    }
+
+    /// Write two bytes to the current chunk
+    fn emit_bytes(&mut self, byte1: u8, byte2: u8) {
+	self.emit_byte(byte1);
+	self.emit_byte(byte2);
+    }
+
+    /// Write a jump address to the current chunk
+    fn emit_jump(&mut self, instruction: u8) -> usize {
+	self.emit_byte(instruction);
+	self.emit_bytes(0xFF, 0xFF);
+
+	self.current_chunk().count() - 2
+    }
+
+    /// Write return opcode to the current chunk
+    fn emit_return(&mut self) {
+	self.emit_byte(Opcode::Return as u8);
+    }
+
+    fn make_constant(&mut self, value: Value) -> usize {
+	let constant_index = self.current_chunk_mut().add_constant(value);
+
+	if constant_index <= 0xFFFF {
+	    constant_index
+	}
+	else {
+	    self.error("Too many constants in one chunk.");
+	    0
+	}
+    }
+
+    /// Write a constant to the chunk's constant table
+    fn emit_constant(&mut self, value: Value) {
+	let constant_index = self.make_constant(value);
+	
+	if constant_index <= 0xFF {
+	    self.emit_bytes(Opcode::Constant as u8, constant_index as u8);
+	}
+	else if constant_index <= 0xFFFF {
+	    self.emit_byte(Opcode::ConstantLong as u8);
+	    self.emit_bytes((constant_index & 0x00FF) as u8, ((constant_index & 0xFF00) >> 8) as u8);
+	}
+    }
+
+    fn patch_jump(&mut self, offset: usize) {
+	let jump = self.current_chunk().count() - offset - 2;
+
+	if jump > 0xFFFF {
+	    self.error("Too much code to jump over.");
+	}
+
+	self.current_chunk_mut().write_byte(offset, (jump & 0xFF) as u8);
+	self.current_chunk_mut().write_byte(offset + 1, ((jump & 0xFF00) >> 8) as u8);
+    }
+
+    /// End compilation
+    fn end(&mut self) {
+	self.emit_return();
+
+	#[cfg(feature = "print_code")]
+	if self.parser.error.is_none() {
+	    debug::disassemble_chunk(self.current_chunk(), self.globals, "code");
+	}
+    }
+
+    /// Enter a local scope
+    fn begin_scope(&mut self) {
+	self.scope_depth += 1;
+    }
+
+    /// Exit a local scope
+    fn end_scope(&mut self) {
+	self.scope_depth -= 1;
+
+	while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
+	    self.emit_byte(Opcode::Pop as u8);
+	    self.locals.pop();
+	}
+    }
+
+    /// Compile a binary expression
+    fn binary(&mut self, can_assign: bool) {
+	let op_type = self.parser.previous.token_type();
+	let rule = &self.parse_rules[&op_type];
+	let next_prec = Precedence::from_repr(rule.precedence as u8 + 1)
+	    .unwrap_or(Precedence::Primary);
+
+	self.parse_precedence(next_prec);
+
+	match op_type {
+	    TokenType::BangEqual => self.emit_byte(Opcode::NotEqual as u8),
+	    TokenType::EqualEqual => self.emit_byte(Opcode::Equal as u8),
+	    TokenType::Greater => self.emit_byte(Opcode::Greater as u8),
+	    TokenType::GreaterEqual => self.emit_byte(Opcode::GreaterEqual as u8),
+	    TokenType::Less => self.emit_byte(Opcode::Less as u8),
+	    TokenType::LessEqual => self.emit_byte(Opcode::LessEqual as u8),
+	    TokenType::Plus => self.emit_byte(Opcode::Add as u8),
+	    TokenType::Minus => self.emit_byte(Opcode::Subtract as u8),
+	    TokenType::Star => self.emit_byte(Opcode::Multiply as u8),
+	    TokenType::Slash => self.emit_byte(Opcode::Divide as u8),
+	    _ => self.error("Invalid token for binary expression.")
+	}
+    }
+
+    /// Compile a literal expression
+    fn literal(&mut self, can_assign: bool) {
+	match self.parser.previous.token_type() {
+	    TokenType::False => self.emit_byte(Opcode::False as u8),
+	    TokenType::Null => self.emit_byte(Opcode::Null as u8),
+	    TokenType::True => self.emit_byte(Opcode::True as u8),
+	    _ => self.error("Invalid token for literal expression.")
+	}
+    }
+
+    /// Compile a grouped expression
+    fn grouping(&mut self, can_assign: bool) {
+	self.expression();
+	self.consume(TokenType::RightParen, "Expect ')' after expression");
+    }
+
+    /// Compile a number literal
+    fn number(&mut self, can_assign: bool) {
+	match self.parser.previous.lexeme().parse::<f64>() {
+	    Ok(value) => self.emit_constant(Value::Number(value)),
+	    Err(e) => self.error(&e.to_string())
+	}
+    }
+
+    /// Compile a string literal
+    fn string(&mut self, can_assign: bool) {
+	let text = self.parser.previous.lexeme();
+	let string = self.heap.allocate_string((&text[1..text.len() - 1]).into());
+	self.emit_constant(Value::Object(string));
+    }
+
+    fn named_variable(&mut self, name: String, can_assign: bool) {
+	let (get_op, set_op, index): (Opcode, Opcode, usize) = {
+	    if let Some(arg) = self.resolve_local(&name) {
+		(
+		    if arg <= 0xFF {Opcode::GetLocal} else {Opcode::GetLocalLong},
+		    if arg <= 0xFF {Opcode::SetLocal} else {Opcode::SetLocalLong},
+		    arg
+		)
+	    }
+	    else {
+		let arg = self.identifier_constant(&name);
+		(
+		    if arg <= 0xFF {Opcode::GetGlobal} else {Opcode::GetGlobalLong},
+		    if arg <= 0xFF {Opcode::SetGlobal} else {Opcode::SetGlobalLong},
+		    arg
+		)
+	    }
+	};
+
+	if can_assign && self.match_token(TokenType::Equal) {
+	    self.expression();
+	    
+	    if set_op == Opcode::SetLocal || set_op == Opcode::SetGlobal {
+		self.emit_bytes(set_op as u8, index as u8);
+	    }
+	    else {
+		self.emit_byte(set_op as u8);
+		self.emit_bytes((index & 0xFF) as u8, (index >> 8) as u8);
+	    }
+	}
+	else {
+	    if get_op == Opcode::GetLocal || get_op == Opcode::GetGlobal {
+		self.emit_bytes(get_op as u8, index as u8);
+	    }
+	    else {
+		self.emit_byte(get_op as u8);
+		self.emit_bytes((index & 0xFF) as u8, (index >> 8) as u8);
+	    }
+	}
+    }
+
+    /// Compile a variable
+    fn variable(&mut self, can_assign: bool) {
+	let name = String::from(self.parser.previous.lexeme());
+	self.named_variable(name, can_assign);
+    }
+
+    /// Compile a unary expression
+    fn unary(&mut self, can_assign: bool) {
+	let op_type: TokenType = self.parser.previous.token_type();
+
+	self.parse_precedence(Precedence::Unary);
+
+	match op_type {
+	    TokenType::Bang => self.emit_byte(Opcode::Not as u8),
+	    TokenType::Minus => self.emit_byte(Opcode::Negate as u8),
+	    // _ => unreachable!("Invalid token for unary expression")
+	    _ => self.error("Invalid token for unary expression")
+	}
+    }
+
+    /// Parse any expression with the given precedence or higher
+    fn parse_precedence(&mut self, precedence: Precedence) {
+	self.advance();
+
+	let prefix_rule = &self.parse_rules[&self.parser.previous.token_type()].prefix;
+	let can_assign = precedence <= Precedence::Assignment;
+
+	match prefix_rule {
+	    Some(prefix) => prefix(self, can_assign),
+	    None => self.error("Expect expression.")
+	}
+
+	while precedence <= self.parse_rules[&self.parser.current.token_type()].precedence {
+	    self.advance();
+	    let infix_rule = &self.parse_rules[&self.parser.previous.token_type()].infix;
+	    
+	    if let Some(infix) = infix_rule {
+		infix(self, can_assign);
+	    }
+
+	    if can_assign && self.match_token(TokenType::Equal) {
+		self.error("Invalid assignment target.");
+	    }
+	}
+    }
+
+    /// Write a variable identifier constant to the current chunk
+    fn identifier_constant(&mut self, name: &str) -> usize {
+	match self.globals.index(name) {
+	    Some(idx) => idx,
+	    None => self.globals.insert(String::from(name), Value::Undefined)
+	}
+    }
+
+    /// Find the index of a local variable, return None if variable is global
+    fn resolve_local(&mut self, name: &str) -> Option<usize> {
+	for i in (0..self.locals.len()).rev() {
+	    let local = &self.locals[i];
+
+	    if local.name.lexeme() == name {
+		if local.depth == 0 {
+		    self.error("Can't read local variable in its own initializer.");
+		}
+		return Some(i);
+	    }
+	}
+
+	None
+    }
+
+    /// Add a local variable to a compiler's local array
+    fn add_local(&mut self, name: Token<'a>) {
+	let local = Local {
+	    name,
+	    depth: 0
+	};
+
+	self.locals.push(local);
+    }
+
+    /// Declare a local variable
+    fn declare_variable(&mut self) {
+	if self.scope_depth == 0 {
+	    return;
+	}
+
+	let name = self.parser.previous.clone();
+
+	for i in (0..self.locals.len()).rev() {
+	    let local = &self.locals[i];
+
+	    if local.depth != 0 && local.depth < self.scope_depth {
+		break;
+	    }
+
+	    if &name == &local.name {
+		self.error("Already a variable with this name in scope.");
+	    }
+	}
+
+	self.add_local(name);
+    }
+
+    fn parse_variable(&mut self, error_message: &'static str) -> usize {
+	self.consume(TokenType::Identifier, error_message);
+
+	self.declare_variable();
+	
+	if self.scope_depth > 0 {
+	    return 0;
+	}
+	
+	let name = self.parser.previous.lexeme();
+	
+	self.identifier_constant(name)
+    }
+
+    /// Initialize a declared local variable
+    fn mark_initialized(&mut self) {
+	let count = self.locals.len();
+	self.locals[count - 1].depth = self.scope_depth;
+    }
+
+    fn define_variable(&mut self, global_index: usize) {
+	if self.scope_depth > 0 {
+	    self.mark_initialized();
+	    return;
+	}
+	
+	if global_index <= 0xFF {
+	    self.emit_bytes(Opcode::DefineGlobal as u8, global_index as u8);
+	}
+	else {
+	    self.emit_byte(Opcode::DefineGlobalLong as u8);
+	    self.emit_bytes((global_index & 0x00FF) as u8, (global_index >> 8) as u8);
+	}
+    }
+
+    /// Compile an expression
+    fn expression(&mut self) {
+	self.parse_precedence(Precedence::Assignment);
+    }
+
+    /// Compile a block surrounded by curly braces
+    fn block(&mut self) {
+	while !self.check_token(TokenType::RightBrace) && !self.check_token(TokenType::EOF) {
+	    self.declaration();
+	}
+
+	self.consume(TokenType::RightBrace, "Expect '}' after block.");
+    }
+
+    /// Compile a variable declaration
+    fn var_declaration(&mut self) {
+	let global_index = self.parse_variable("Expect variable name.");
+
+	if self.match_token(TokenType::Equal) {
+	    self.expression();
+	}
+	else {
+	    self.emit_byte(Opcode::Null as u8);
+	}
+
+	self.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
+	self.define_variable(global_index);
+    }
+
+    /// Compile an expression statement
+    fn expression_statement(&mut self) {
+	self.expression();
+	self.consume(TokenType::Semicolon, "Expect ';' after expression.");
+	self.emit_byte(Opcode::Pop as u8);
+    }
+
+    /// Compile an if statement
+    fn if_statement(&mut self) {
+	self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+	self.expression();
+	self.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+	let then_jump = self.emit_jump(Opcode::JumpIfFalse as u8);
+	self.emit_byte(Opcode::Pop as u8);
+	self.statement();
+
+	let else_jump = self.emit_jump(Opcode::Jump as u8);
+	
+	self.patch_jump(then_jump);
+	self.emit_byte(Opcode::Pop as u8);
+
+	if self.match_token(TokenType::Else) {
+	    self.statement();
+	}
+
+	self.patch_jump(else_jump);
+    }
+
+    /// Compile a print statement
+    fn print_statement(&mut self) {
+	self.expression();
+	self.consume(TokenType::Semicolon, "Expect ';' after value.");
+	self.emit_byte(Opcode::Print as u8);
+    }
+
+    /// Advance to the possible beginning/end of a statement
+    fn synchronize(&mut self) {
+	self.parser.panic_mode = false;
+
+	while self.parser.current.token_type() != TokenType::EOF {
+	    if self.parser.previous.token_type() == TokenType::Semicolon {
+		return;
+	    }
+
+	    match self.parser.current.token_type() {
+		TokenType::Class |
+		TokenType::Function |
+		TokenType::Var |
+		TokenType::For |
+		TokenType::If |
+		TokenType::While |
+		TokenType::Print |
+		TokenType::Return => return,
+
+		_ => {}
+	    }
+
+	    self.advance();
+	}
+    }
+
+    /// Compile a declaration
+    fn declaration(&mut self) {
+	if self.match_token(TokenType::Var) {
+	    self.var_declaration();
+	}
+	else {
+	    self.statement();
+	}
+
+	if self.parser.panic_mode {
+	    self.synchronize();
+	}
+    }
+
+    /// Compile a statement
+    fn statement(&mut self) {
+	if self.match_token(TokenType::Print) {
+	    self.print_statement();
+	}
+	else if self.match_token(TokenType::If) {
+	    self.if_statement();
+	}
+	else if self.match_token(TokenType::LeftBrace) {
+	    self.begin_scope();
+	    self.block();
+	    self.end_scope();
+	}
+	else {
+	    self.expression_statement();
+	}
+    }
+
+    /// Report an error found at the previous token
+    fn error(&mut self, message: &str) {
+	self.error_at(self.parser.previous, message);
+    }
+
+    /// Report an error found at the current token
+    fn error_at_current(&mut self, message: &str) {
+	self.error_at(self.parser.current, message);
+    }
+
+    /// Report an error found at the given token
+    fn error_at(&mut self, token: Token<'a>, message: &str) {
+	if self.parser.panic_mode {
+	    return;
+	}
+
+	self.parser.panic_mode = true;
+
+	/*
+	eprint!("[line {}] Error", token.line());
+
+	if token.token_type() == TokenType::EOF {
+	eprint!(" at end");
+    }
+	else if token.token_type() == TokenType::Error {
+	// Nothing
+    }
+	else {
+	eprint!(" at '{:.*}'", token.lexeme().len(), token.lexeme());
+    }
+
+	eprintln!(": {}", message);
+	 */
+	
+	self.parser.error = Some(CompileError::new(message, &token));
+    }
 }
 
 pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap, globals: &mut Globals) -> Result<(), CompileError> {
     let mut compiler = Compiler::new(source, chunk, heap, globals);
 
-    advance(&mut compiler);
+    compiler.advance();
 
-    while !match_token(&mut compiler, TokenType::EOF) {
-	declaration(&mut compiler);
+    while !compiler.match_token(TokenType::EOF) {
+	compiler.declaration();
     }
 
-    end(&mut compiler);
+    compiler.end();
 
     if let Some(error) = compiler.parser.error.take() {
 	Err(error)
@@ -190,548 +720,4 @@ pub(crate) fn compile(source: &str, chunk: &mut Chunk, heap: &mut Heap, globals:
     else {
 	Ok(())
     }
-}
-
-fn current_chunk<'a, 'b>(compiler: &'b Compiler<'a>) -> &'b Chunk
-where 'a: 'b {
-    compiler.chunk
-}
-
-fn current_chunk_mut<'a, 'b>(compiler: &'b mut Compiler<'a>) -> &'b mut Chunk
-where 'a: 'b {
-    compiler.chunk
-}
-
-/// Scan for the next token
-fn advance<'a, 'b>(compiler: &'b mut Compiler<'a>)
-where 'a: 'b {
-    compiler.parser.previous = compiler.parser.current;
-
-    loop {
-	let token = compiler.scanner.scan_token();
-	
-	compiler.parser.current = token;
-
-	if compiler.parser.current.token_type() != TokenType::Error {
-	    break;
-	}
-
-	error_at_current(compiler, compiler.parser.current.lexeme());
-    }
-}
-
-/// Check if the parser's current token matches the given type
-fn consume(compiler: &mut Compiler, token_type: TokenType, message: &'static str) {
-    if compiler.parser.current.token_type() == token_type {
-	advance(compiler);
-	return;
-    }
-
-    error_at_current(compiler, message);
-}
-
-/// Check if the current token matches the given type
-fn check_token(compiler: &Compiler, token_type: TokenType) -> bool {
-    compiler.parser.current.token_type() == token_type
-}
-
-/// Advance to the next token if the current one matches the given type
-fn match_token(compiler: &mut Compiler, token_type: TokenType) -> bool {
-    if !check_token(compiler, token_type) {
-	return false;
-    }
-
-    advance(compiler);
-    true
-}
-
-/// Write a single byte to the current chunk
-fn emit_byte<'a, 'b>(compiler: &'b mut Compiler<'a>, byte: u8)
-where 'a: 'b {
-    let line = compiler.parser.previous.line();
-    current_chunk_mut(compiler).push_byte(byte, line);
-}
-
-/// Write two bytes to the current chunk
-fn emit_bytes<'a, 'b>(compiler: &'b mut Compiler<'a>, byte1: u8, byte2: u8)
-where 'a: 'b {
-    emit_byte(compiler, byte1);
-    emit_byte(compiler, byte2);
-}
-
-/// Write a jump address to the current chunk
-fn emit_jump(compiler: &mut Compiler, instruction: u8) -> usize {
-    emit_byte(compiler, instruction);
-    emit_bytes(compiler, 0xFF, 0xFF);
-
-    current_chunk(compiler).count() - 2
-}
-
-/// Write return opcode to the current chunk
-fn emit_return(compiler: &mut Compiler) {
-    emit_byte(compiler, Opcode::Return as u8);
-}
-
-fn make_constant<'a, 'b>(compiler: &'b mut Compiler<'a>, value: Value) -> usize
-where 'a: 'b {
-    let constant_index = current_chunk_mut(compiler).add_constant(value);
-
-    if constant_index <= 0xFFFF {
-	constant_index
-    }
-    else {
-	error(compiler, "Too many constants in one chunk.");
-	0
-    }
-}
-
-/// Write a constant to the chunk's constant table
-fn emit_constant(compiler: &mut Compiler, value: Value) {
-    let constant_index = make_constant(compiler, value);
-    
-    if constant_index <= 0xFF {
-	emit_bytes(compiler, Opcode::Constant as u8, constant_index as u8);
-    }
-    else if constant_index <= 0xFFFF {
-	emit_byte(compiler, Opcode::ConstantLong as u8);
-	emit_bytes(compiler, (constant_index & 0x00FF) as u8, ((constant_index & 0xFF00) >> 8) as u8);
-    }
-}
-
-fn patch_jump(compiler: &mut Compiler, offset: usize) {
-    let jump = current_chunk(compiler).count() - offset - 2;
-
-    if jump > 0xFFFF {
-	error(compiler, "Too much code to jump over.");
-    }
-
-    current_chunk_mut(compiler).write_byte(offset, (jump & 0xFF) as u8);
-    current_chunk_mut(compiler).write_byte(offset + 1, ((jump & 0xFF00) >> 8) as u8);
-}
-
-/// End compilation
-fn end(compiler: &mut Compiler) {
-    emit_return(compiler);
-
-    #[cfg(feature = "print_code")]
-    if compiler.parser.error.is_none() {
-	let chunk = &*current_chunk(compiler);
-	debug::disassemble_chunk(chunk, compiler.globals, "code");
-    }
-}
-
-/// Enter a local scope
-fn begin_scope(compiler: &mut Compiler) {
-    compiler.scope_depth += 1;
-}
-
-/// Exit a local scope
-fn end_scope(compiler: &mut Compiler) {
-    compiler.scope_depth -= 1;
-
-    while compiler.locals.len() > 0 && compiler.locals[compiler.locals.len() - 1].depth > compiler.scope_depth {
-	emit_byte(compiler, Opcode::Pop as u8);
-	compiler.locals.pop();
-    }
-}
-
-/// Compile a binary expression
-fn binary(compiler: &mut Compiler, can_assign: bool) {
-    let op_type = compiler.parser.previous.token_type();
-    let rule = &compiler.parse_rules[&op_type];
-    let next_prec = Precedence::from_repr(rule.precedence as u8 + 1)
-	.unwrap_or(Precedence::Primary);
-
-    parse_precedence(compiler, next_prec);
-
-    match op_type {
-	TokenType::BangEqual => emit_byte(compiler, Opcode::NotEqual as u8),
-	TokenType::EqualEqual => emit_byte(compiler, Opcode::Equal as u8),
-	TokenType::Greater => emit_byte(compiler, Opcode::Greater as u8),
-	TokenType::GreaterEqual => emit_byte(compiler, Opcode::GreaterEqual as u8),
-	TokenType::Less => emit_byte(compiler, Opcode::Less as u8),
-	TokenType::LessEqual => emit_byte(compiler, Opcode::LessEqual as u8),
-	TokenType::Plus => emit_byte(compiler, Opcode::Add as u8),
-	TokenType::Minus => emit_byte(compiler, Opcode::Subtract as u8),
-	TokenType::Star => emit_byte(compiler, Opcode::Multiply as u8),
-	TokenType::Slash => emit_byte(compiler, Opcode::Divide as u8),
-	_ => error(compiler, "Invalid token for binary expression.")
-    }
-}
-
-/// Compile a literal expression
-fn literal(compiler: &mut Compiler, can_assign: bool) {
-    match compiler.parser.previous.token_type() {
-	TokenType::False => emit_byte(compiler, Opcode::False as u8),
-	TokenType::Null => emit_byte(compiler, Opcode::Null as u8),
-	TokenType::True => emit_byte(compiler, Opcode::True as u8),
-	_ => error(compiler, "Invalid token for literal expression.")
-    }
-}
-
-/// Compile a grouped expression
-fn grouping(compiler: &mut Compiler, can_assign: bool) {
-    expression(compiler);
-    consume(compiler, TokenType::RightParen, "Expect ')' after expression");
-}
-
-/// Compile a number literal
-fn number(compiler: &mut Compiler, can_assign: bool) {
-    match compiler.parser.previous.lexeme().parse::<f64>() {
-	Ok(value) => emit_constant(compiler, Value::Number(value)),
-	Err(e) => error(compiler, &e.to_string())
-    }
-}
-
-/// Compile a string literal
-fn string(compiler: &mut Compiler, can_assign: bool) {
-    let text = compiler.parser.previous.lexeme();
-    let string = compiler.heap.allocate_string((&text[1..text.len() - 1]).into());
-    emit_constant(compiler, Value::Object(string));
-}
-
-fn named_variable(compiler: &mut Compiler, name: String, can_assign: bool) {
-    let (get_op, set_op, index): (Opcode, Opcode, usize) = {
-	if let Some(arg) = resolve_local(compiler, &name) {
-	    (
-		if arg <= 0xFF {Opcode::GetLocal} else {Opcode::GetLocalLong},
-		if arg <= 0xFF {Opcode::SetLocal} else {Opcode::SetLocalLong},
-		arg
-	    )
-	}
-	else {
-	    let arg = identifier_constant(compiler, &name);
-	    (
-		if arg <= 0xFF {Opcode::GetGlobal} else {Opcode::GetGlobalLong},
-		if arg <= 0xFF {Opcode::SetGlobal} else {Opcode::SetGlobalLong},
-		arg
-	    )
-	}
-    };
-
-    if can_assign && match_token(compiler, TokenType::Equal) {
-	expression(compiler);
-	
-	if set_op == Opcode::SetLocal || set_op == Opcode::SetGlobal {
-	    emit_bytes(compiler, set_op as u8, index as u8);
-	}
-	else {
-	    emit_byte(compiler, set_op as u8);
-	    emit_bytes(compiler, (index & 0xFF) as u8, (index >> 8) as u8);
-	}
-    }
-    else {
-	if get_op == Opcode::GetLocal || get_op == Opcode::GetGlobal {
-	    emit_bytes(compiler, get_op as u8, index as u8);
-	}
-	else {
-	    emit_byte(compiler, get_op as u8);
-	    emit_bytes(compiler, (index & 0xFF) as u8, (index >> 8) as u8);
-	}
-    }
-}
-
-/// Compile a variable
-fn variable(compiler: &mut Compiler, can_assign: bool) {
-    let name = String::from(compiler.parser.previous.lexeme());
-    named_variable(compiler, name, can_assign);
-}
-
-/// Compile a unary expression
-fn unary(compiler: &mut Compiler, can_assign: bool) {
-    let op_type: TokenType = compiler.parser.previous.token_type();
-
-    parse_precedence(compiler, Precedence::Unary);
-
-    match op_type {
-	TokenType::Bang => emit_byte(compiler, Opcode::Not as u8),
-	TokenType::Minus => emit_byte(compiler, Opcode::Negate as u8),
-	// _ => unreachable!("Invalid token for unary expression")
-	_ => error(compiler, "Invalid token for unary expression")
-    }
-}
-
-/// Parse any expression with the given precedence or higher
-fn parse_precedence(compiler: &mut Compiler, precedence: Precedence) {
-    advance(compiler);
-
-    let prefix_rule = &compiler.parse_rules[&compiler.parser.previous.token_type()].prefix;
-    let can_assign = precedence <= Precedence::Assignment;
-
-    match prefix_rule {
-	Some(prefix) => prefix(compiler, can_assign),
-	None => error(compiler, "Expect expression.")
-    }
-
-    while precedence <= compiler.parse_rules[&compiler.parser.current.token_type()].precedence {
-	advance(compiler);
-	let infix_rule = &compiler.parse_rules[&compiler.parser.previous.token_type()].infix;
-	
-	if let Some(infix) = infix_rule {
-	    infix(compiler, can_assign);
-	}
-
-	if can_assign && match_token(compiler, TokenType::Equal) {
-	    error(compiler, "Invalid assignment target.");
-	}
-    }
-}
-
-/// Write a variable identifier constant to the current chunk
-fn identifier_constant(compiler: &mut Compiler, name: &str) -> usize {
-    match compiler.globals.index(name) {
-	Some(idx) => idx,
-	None => compiler.globals.insert(String::from(name), Value::Undefined)
-    }
-}
-
-/// Find the index of a local variable, return None if variable is global
-fn resolve_local(compiler: &mut Compiler, name: &str) -> Option<usize> {
-    for i in (0..compiler.locals.len()).rev() {
-	let local = &compiler.locals[i];
-
-	if local.name.lexeme() == name {
-	    if local.depth == 0 {
-		error(compiler, "Can't read local variable in its own initializer.");
-	    }
-	    return Some(i);
-	}
-    }
-
-    None
-}
-
-/// Add a local variable to a compiler's local array
-fn add_local<'a>(compiler: &mut Compiler<'a>, name: Token<'a>) {
-    let local = Local {
-	name,
-	depth: 0
-    };
-
-    compiler.locals.push(local);
-}
-
-/// Declare a local variable
-fn declare_variable(compiler: &mut Compiler) {
-    if compiler.scope_depth == 0 {
-	return;
-    }
-
-    let name = compiler.parser.previous.clone();
-
-    for i in (0..compiler.locals.len()).rev() {
-	let local = &compiler.locals[i];
-
-	if local.depth != 0 && local.depth < compiler.scope_depth {
-	    break;
-	}
-
-	if &name == &local.name {
-	    error(compiler, "Already a variable with this name in scope.");
-	}
-    }
-
-    add_local(compiler, name);
-}
-
-fn parse_variable(compiler: &mut Compiler, error_message: &'static str) -> usize {
-    consume(compiler, TokenType::Identifier, error_message);
-
-    declare_variable(compiler);
-    
-    if compiler.scope_depth > 0 {
-	return 0;
-    }
-    
-    let name = compiler.parser.previous.lexeme();
-    
-    identifier_constant(compiler, name)
-}
-
-/// Initialize a declared local variable
-fn mark_initialized(compiler: &mut Compiler) {
-    let count = compiler.locals.len();
-    compiler.locals[count - 1].depth = compiler.scope_depth;
-}
-
-fn define_variable(compiler: &mut Compiler, global_index: usize) {
-    if compiler.scope_depth > 0 {
-	mark_initialized(compiler);
-	return;
-    }
-    
-    if global_index <= 0xFF {
-	emit_bytes(compiler, Opcode::DefineGlobal as u8, global_index as u8);
-    }
-    else {
-	emit_byte(compiler, Opcode::DefineGlobalLong as u8);
-	emit_bytes(compiler, (global_index & 0x00FF) as u8, (global_index >> 8) as u8);
-    }
-}
-
-fn get_rule<'a>(compiler: &'a Compiler<'a>, token_type: TokenType) -> &'a ParseRule {
-    &compiler.parse_rules[&token_type]
-}
-
-/// Compile an expression
-fn expression(compiler: &mut Compiler) {
-    parse_precedence(compiler, Precedence::Assignment);
-}
-
-/// Compile a block surrounded by curly braces
-fn block(compiler: &mut Compiler) {
-    while !check_token(compiler, TokenType::RightBrace) && !check_token(compiler, TokenType::EOF) {
-	declaration(compiler);
-    }
-
-    consume(compiler, TokenType::RightBrace, "Expect '}' after block.");
-}
-
-/// Compile a variable declaration
-fn var_declaration(compiler: &mut Compiler) {
-    let global_index = parse_variable(compiler, "Expect variable name.");
-
-    if match_token(compiler, TokenType::Equal) {
-	expression(compiler);
-    }
-    else {
-	emit_byte(compiler, Opcode::Null as u8);
-    }
-
-    consume(compiler, TokenType::Semicolon, "Expect ';' after variable declaration.");
-    define_variable(compiler, global_index);
-}
-
-/// Compile an expression statement
-fn expression_statement(compiler: &mut Compiler) {
-    expression(compiler);
-    consume(compiler, TokenType::Semicolon, "Expect ';' after expression.");
-    emit_byte(compiler, Opcode::Pop as u8);
-}
-
-/// Compile an if statement
-fn if_statement(compiler: &mut Compiler) {
-    consume(compiler, TokenType::LeftParen, "Expect '(' after 'if'.");
-    expression(compiler);
-    consume(compiler, TokenType::RightParen, "Expect ')' after condition.");
-
-    let then_jump = emit_jump(compiler, Opcode::JumpIfFalse as u8);
-    emit_byte(compiler, Opcode::Pop as u8);
-    statement(compiler);
-
-    let else_jump = emit_jump(compiler, Opcode::Jump as u8);
-    
-    patch_jump(compiler, then_jump);
-    emit_byte(compiler, Opcode::Pop as u8);
-
-    if match_token(compiler, TokenType::Else) {
-	statement(compiler);
-    }
-
-    patch_jump(compiler, else_jump);
-}
-
-/// Compile a print statement
-fn print_statement(compiler: &mut Compiler) {
-    expression(compiler);
-    consume(compiler, TokenType::Semicolon, "Expect ';' after value.");
-    emit_byte(compiler, Opcode::Print as u8);
-}
-
-/// Advance to the possible beginning/end of a statement
-fn synchronize(compiler: &mut Compiler) {
-    compiler.parser.panic_mode = false;
-
-    while compiler.parser.current.token_type() != TokenType::EOF {
-	if compiler.parser.previous.token_type() == TokenType::Semicolon {
-	    return;
-	}
-
-	match compiler.parser.current.token_type() {
-	    TokenType::Class |
-	    TokenType::Function |
-	    TokenType::Var |
-	    TokenType::For |
-	    TokenType::If |
-	    TokenType::While |
-	    TokenType::Print |
-	    TokenType::Return => return,
-
-	    _ => {}
-	}
-
-	advance(compiler);
-    }
-}
-
-/// Compile a declaration
-fn declaration(compiler: &mut Compiler) {
-    if match_token(compiler, TokenType::Var) {
-	var_declaration(compiler);
-    }
-    else {
-	statement(compiler);
-    }
-
-    if compiler.parser.panic_mode {
-	synchronize(compiler);
-    }
-}
-
-/// Compile a statement
-fn statement(compiler: &mut Compiler) {
-    if match_token(compiler, TokenType::Print) {
-	print_statement(compiler);
-    }
-    else if match_token(compiler, TokenType::If) {
-	if_statement(compiler);
-    }
-    else if match_token(compiler, TokenType::LeftBrace) {
-	begin_scope(compiler);
-	block(compiler);
-	end_scope(compiler);
-    }
-    else {
-	expression_statement(compiler);
-    }
-}
-
-/// Report an error found at the previous token
-fn error<'a, 'b>(compiler: &'b mut Compiler<'a>, message: &str)
-where 'a: 'b {
-    error_at(compiler, compiler.parser.previous, message);
-}
-
-/// Report an error found at the current token
-fn error_at_current<'a, 'b>(compiler: &'b mut Compiler<'a>, message: &str)
-where 'a: 'b {
-    error_at(compiler, compiler.parser.current, message);
-}
-
-/// Report an error found at the given token
-fn error_at<'a, 'b>(compiler: &'b mut Compiler<'a>, token: Token<'a>, message: &str)
-where 'a: 'b {
-    if compiler.parser.panic_mode {
-	return;
-    }
-
-    compiler.parser.panic_mode = true;
-
-    /*
-    eprint!("[line {}] Error", token.line());
-
-    if token.token_type() == TokenType::EOF {
-    eprint!(" at end");
-}
-    else if token.token_type() == TokenType::Error {
-    // Nothing
-}
-    else {
-    eprint!(" at '{:.*}'", token.lexeme().len(), token.lexeme());
-}
-
-    eprintln!(": {}", message);
-     */
-    
-    compiler.parser.error = Some(CompileError::new(message, &token));
 }
