@@ -135,6 +135,7 @@ impl <'a> Compiler<'a> {
 		(TokenType::Comma, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Dot, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Minus, ParseRule::new(Some(Compiler::unary), Some(Compiler::binary), Precedence::Term)),
+		(TokenType::Percent, ParseRule::new(None, Some(Compiler::binary), Precedence::Factor)),
 		(TokenType::Plus, ParseRule::new(None, Some(Compiler::binary), Precedence::Term)),
 		(TokenType::Semicolon, ParseRule::new(None, None, Precedence::None)),
 		(TokenType::Slash, ParseRule::new(None, Some(Compiler::binary), Precedence::Factor)),
@@ -338,6 +339,7 @@ impl <'a> Compiler<'a> {
 	    TokenType::Less => self.emit_byte(Opcode::Less as u8),
 	    TokenType::LessEqual => self.emit_byte(Opcode::LessEqual as u8),
 	    TokenType::Plus => self.emit_byte(Opcode::Add as u8),
+	    TokenType::Percent => self.emit_byte(Opcode::Modulo as u8),
 	    TokenType::Minus => self.emit_byte(Opcode::Subtract as u8),
 	    TokenType::Star => self.emit_byte(Opcode::Multiply as u8),
 	    TokenType::Slash => self.emit_byte(Opcode::Divide as u8),
@@ -614,6 +616,58 @@ impl <'a> Compiler<'a> {
 	self.emit_byte(Opcode::Pop as u8);
     }
 
+    /// Compile a for loop
+    fn for_statement(&mut self) {
+	self.begin_scope();
+	self.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+
+	if self.match_token(TokenType::Semicolon) {
+	    // No initializer
+	}
+	else if self.match_token(TokenType::Var) {
+	    self.var_declaration();
+	}
+	else {
+	    self.expression_statement();
+	}
+
+	let mut loop_start = self.current_chunk().count();
+	let mut exit_jump: Option<usize> = None;
+	
+	if !self.match_token(TokenType::Semicolon) {
+	    self.expression();
+	    self.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+
+	    exit_jump = Some(self.emit_jump(Opcode::JumpIfFalse as u8));
+	    
+	    self.emit_byte(Opcode::Pop as u8);
+	}
+
+	if !self.match_token(TokenType::RightParen) {
+	    let body_jump = self.emit_jump(Opcode::Jump as u8);
+	    let inc_start = self.current_chunk().count();
+
+	    self.expression();
+	    self.emit_byte(Opcode::Pop as u8);
+	    self.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+	    self.emit_loop(loop_start);
+	    
+	    loop_start = inc_start;
+
+	    self.patch_jump(body_jump);
+	}
+
+	self.statement();
+	self.emit_loop(loop_start);
+
+	if let Some(index) = exit_jump {
+	    self.patch_jump(index);
+	    self.emit_byte(Opcode::Pop as u8);
+	}
+	
+	self.end_scope();
+    }
+
     /// Compile an if statement
     fn if_statement(&mut self) {
 	self.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
@@ -621,6 +675,7 @@ impl <'a> Compiler<'a> {
 	self.consume(TokenType::RightParen, "Expect ')' after condition.");
 
 	let then_jump = self.emit_jump(Opcode::JumpIfFalse as u8);
+	
 	self.emit_byte(Opcode::Pop as u8);
 	self.statement();
 
@@ -705,6 +760,9 @@ impl <'a> Compiler<'a> {
     fn statement(&mut self) {
 	if self.match_token(TokenType::Print) {
 	    self.print_statement();
+	}
+	else if self.match_token(TokenType::For) {
+	    self.for_statement();
 	}
 	else if self.match_token(TokenType::If) {
 	    self.if_statement();

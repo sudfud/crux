@@ -4,6 +4,7 @@ print a;
 {
 	var a = "hi";
 	var b = ":)";
+	b = ":))";
 	print a + " " + b;
 }
 

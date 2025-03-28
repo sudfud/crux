@@ -57,6 +57,7 @@ pub(crate) fn disassemble_instruction(chunk: &Chunk, globals: &Globals, offset: 
 	    Opcode::Subtract => simple_instruction("OP_SUBTRACT", offset),
 	    Opcode::Multiply => simple_instruction("OP_MULTIPLY", offset),
 	    Opcode::Divide => simple_instruction("OP_DIVIDE", offset),
+	    Opcode::Modulo => simple_instruction("OP_MODULO", offset),
 	    Opcode::Not => simple_instruction("OP_NOT", offset),
 	    Opcode::Negate => simple_instruction("OP_NEGATE", offset),
 	    Opcode::Print => simple_instruction("OP_PRINT", offset),
@@ -144,7 +145,7 @@ fn jump_instruction(name: &str, sign: isize, chunk: &Chunk, offset: usize) -> us
 
     jump |= (chunk.read_byte(offset + 2) as usize) << 8;
 
-    println!("{:-16} {:4} -> {}", name, offset, offset + 3 + (sign * jump as isize) as usize);
+    println!("{:-16} {:4} -> {}", name, offset, offset as isize + 3 + (sign * jump as isize));
 
     offset + 3
 }

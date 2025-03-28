@@ -147,7 +147,7 @@ impl VM {
     }
 
     fn run(&mut self) -> Result<(), InterpretError> {
-	use std::ops::{Add, Sub, Mul, Div};
+	use std::ops::{Add, Sub, Mul, Div, Rem};
 	
 	// Define macros
 	macro_rules! read_byte {
@@ -246,9 +246,7 @@ impl VM {
 			    read_word!() as usize
 			};
 
-			let local = self.stack[slot].clone();
-
-			self.push_value(local);
+			self.stack[slot] = self.peek_value(0).clone();
 		    },
 		    Opcode::GetGlobal | Opcode::GetGlobalLong => {
 			let global_index = if instruction == Opcode::GetGlobal {
@@ -333,6 +331,7 @@ impl VM {
 		    Opcode::Subtract => self.binary_op(Value::sub)?,
 		    Opcode::Multiply => self.binary_op(Value::mul)?,
 		    Opcode::Divide => self.binary_op(Value::div)?,
+		    Opcode::Modulo => self.binary_op(Value::rem)?,
 		    Opcode::Not => match self.stack.last_mut() {
 			Some(value) => *value = Value::Boolean(value.is_falsey()),
 			None => {

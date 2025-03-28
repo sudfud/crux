@@ -1,0 +1,55 @@
+          
+0000    1 OP_CONSTANT         0 'hello'
+          [ hello ]
+0002    | OP_DEFINE_GLOBAL    0 'undefined'
+          
+0004    2 OP_GET_GLOBAL       0 'hello'
+          [ hello ]
+0006    | OP_PRINT
+hello
+          
+0007    5 OP_CONSTANT         1 'hi'
+          [ hi ]
+0009    6 OP_CONSTANT         2 ':)'
+          [ hi ][ :) ]
+0011    7 OP_CONSTANT         3 ':))'
+          [ hi ][ :) ][ :)) ]
+0013    | OP_SET_LOCAL        1
+          [ hi ][ :) ][ :)) ][ :) ]
+0015    | OP_POP
+          [ hi ][ :) ][ :)) ]
+0016    8 OP_GET_LOCAL        0
+          [ hi ][ :) ][ :)) ][ hi ]
+0018    | OP_CONSTANT         4 ' '
+          [ hi ][ :) ][ :)) ][ hi ][   ]
+0020    | OP_ADD
+          [ hi ][ :) ][ :)) ][ hi  ]
+0021    | OP_GET_LOCAL        1
+          [ hi ][ :) ][ :)) ][ hi  ][ :) ]
+0023    | OP_ADD
+          [ hi ][ :) ][ :)) ][ hi :) ]
+0024    | OP_PRINT
+hi :)
+          [ hi ][ :) ][ :)) ]
+0025    9 OP_POP
+          [ hi ][ :) ]
+0026    | OP_POP
+          [ hi ]
+0027   11 OP_CONSTANT         5 ':D'
+          [ hi ][ :D ]
+0029    | OP_DEFINE_GLOBAL    1 'undefined'
+          [ hi ]
+0031   13 OP_GET_GLOBAL       0 'hello'
+          [ hi ][ hello ]
+0033    | OP_CONSTANT         6 ' '
+          [ hi ][ hello ][   ]
+0035    | OP_ADD
+          [ hi ][ hello  ]
+0036    | OP_GET_GLOBAL       1 ':D'
+          [ hi ][ hello  ][ :D ]
+0038    | OP_ADD
+          [ hi ][ hello :D ]
+0039    | OP_PRINT
+hello :D
+          [ hi ]
+0040   14 OP_RETURN

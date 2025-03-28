@@ -12,6 +12,7 @@ pub(crate) enum TokenType {
     Comma,
     Dot,
     Minus,
+    Percent,
     Plus,
     Semicolon,
     Slash,
@@ -134,6 +135,7 @@ impl <'a> Scanner<'a> {
 	    '+' => self.make_token(TokenType::Plus),
 	    '/' => self.make_token(TokenType::Slash),
 	    '*' => self.make_token(TokenType::Star),
+	    '%' => self.make_token(TokenType::Percent),
 
 	    // One or two char tokens
 	    '!' => {

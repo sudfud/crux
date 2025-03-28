@@ -123,3 +123,14 @@ impl ops::Div for Value {
 	}
     }
 }
+
+impl ops::Rem for Value {
+    type Output = Result<Self, &'static str>;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+	match (self, rhs) {
+	    (Self::Number(a), Self::Number(b)) => Ok(Self::Number(a % b)),
+	    _ => Err("Operands must be numbers.")
+	}
+    }
+}
